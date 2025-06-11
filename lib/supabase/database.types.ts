@@ -801,6 +801,7 @@ export type Database = {
           preferred_hooks: Json | null;
           primary_goal: string | null;
           question_usage: string | null;
+          sample_posts: Json | null;
           signature_expressions: Json | null;
           storytelling_style: string | null;
           structural_patterns: Json | null;
@@ -844,6 +845,7 @@ export type Database = {
           preferred_hooks?: Json | null;
           primary_goal?: string | null;
           question_usage?: string | null;
+          sample_posts?: Json | null;
           signature_expressions?: Json | null;
           storytelling_style?: string | null;
           structural_patterns?: Json | null;
@@ -887,6 +889,7 @@ export type Database = {
           preferred_hooks?: Json | null;
           primary_goal?: string | null;
           question_usage?: string | null;
+          sample_posts?: Json | null;
           signature_expressions?: Json | null;
           storytelling_style?: string | null;
           structural_patterns?: Json | null;

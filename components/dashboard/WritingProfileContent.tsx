@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
+import { revalidatePreferences } from "@/lib/supabase/server-queries";
 import { CreateWritingProfileModal } from "@/components/common/CreateWritingProfileModal";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -104,6 +105,7 @@ export function WritingProfileContent({
   const [showCreateModal, setShowCreateModal] = useState(
     !initialData.hasPreferences
   );
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const supabase = createClient();
 
@@ -121,6 +123,7 @@ export function WritingProfileContent({
       }
 
       if (data) {
+        console.log("Fetched data sample_posts:", data.sample_posts);
         setPreferences(data);
         setLocalPreferences(data);
         setShowCreateModal(false);
@@ -130,7 +133,7 @@ export function WritingProfileContent({
     }
   }, [userId, supabase]);
 
-  // Update local state when preferences change
+  // Update local state when preferences change - simple sync
   useEffect(() => {
     if (preferences) {
       setLocalPreferences(preferences);
@@ -184,7 +187,16 @@ export function WritingProfileContent({
 
       toast.success("Writing profile updated successfully!");
       setEditMode(false);
-      fetchPreferences(); // Refresh data
+
+      // Update the main preferences state with saved data
+      setPreferences(localPreferences);
+
+      // Revalidate server cache (but don't immediately fetch to avoid overwriting)
+      try {
+        await revalidatePreferences();
+      } catch (revalidationError) {
+        console.warn("Cache revalidation failed:", revalidationError);
+      }
     } catch (error) {
       console.error("Error:", error);
       toast.error("Failed to save writing profile");
@@ -223,20 +235,49 @@ export function WritingProfileContent({
       const postData = {
         content: newSamplePost.trim(),
         added_at: new Date().toISOString(),
+        analyzed_at: new Date().toISOString(),
         word_count: newSamplePost.trim().split(/\s+/).length,
         character_count: newSamplePost.trim().length,
       };
 
       const currentPosts = localPreferences.sample_posts || [];
-      updateField("sample_posts", [...currentPosts, postData]);
+      const updatedPosts = [...currentPosts, postData];
+
+      // Save to database FIRST
+      const { error } = await supabase
+        .from("user_preferences")
+        .update({
+          sample_posts: updatedPosts,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", localPreferences.id);
+
+      if (error) {
+        console.error("Error saving post:", error);
+        toast.error("Failed to save post");
+        return;
+      }
+
+      // Clear the input
       setNewSamplePost("");
+
+      // Fetch fresh data from database to ensure consistency
+      await fetchPreferences();
+
+      console.log(
+        "After saving and fetching, sample_posts:",
+        localPreferences?.sample_posts
+      );
 
       toast.success("Sample post added - analyzing writing style...", {
         duration: 3000,
       });
 
-      // Auto-analyze the writing style
-      await analyzeWritingStyle([...currentPosts, postData]);
+      // Now analyze the writing style
+      await analyzeWritingStyle(updatedPosts);
+
+      // Save the analysis results
+      await handleSave();
     } catch (error) {
       console.error("Error adding sample post:", error);
       toast.error("Failed to add sample post");
@@ -262,27 +303,42 @@ export function WritingProfileContent({
 
       const analysis = await response.json();
 
-      // Update the preferences with analyzed data
+      // Update the preferences with analyzed data (preserve sample_posts)
       if (localPreferences) {
         setLocalPreferences((prev) =>
           prev
             ? {
                 ...prev,
+                // CRITICAL: Never modify sample_posts here - they're already saved to DB
+                // sample_posts: prev.sample_posts || [], // Don't touch this field
+                // Update fields if they don't exist or analysis provides better data
                 frequently_used_words:
-                  analysis.frequently_used_words || prev.frequently_used_words,
+                  analysis.frequently_used_words &&
+                  analysis.frequently_used_words.length > 0
+                    ? analysis.frequently_used_words
+                    : prev.frequently_used_words || [],
                 signature_expressions:
-                  analysis.signature_expressions || prev.signature_expressions,
+                  analysis.signature_expressions &&
+                  analysis.signature_expressions.length > 0
+                    ? analysis.signature_expressions
+                    : prev.signature_expressions || [],
                 emoji_usage_preference:
-                  analysis.emoji_usage || prev.emoji_usage_preference,
+                  analysis.emoji_usage ||
+                  prev.emoji_usage_preference ||
+                  "minimal",
                 average_sentence_length:
-                  analysis.sentence_length || prev.average_sentence_length,
+                  analysis.sentence_length ||
+                  prev.average_sentence_length ||
+                  "medium",
                 directness_level:
-                  analysis.directness_level || prev.directness_level,
+                  analysis.directness_level || prev.directness_level || 5,
                 confidence_level:
-                  analysis.confidence_level || prev.confidence_level,
-                energy_level: analysis.energy_level || prev.energy_level,
-                writing_style_tone: analysis.tone || prev.writing_style_tone,
-                humor_usage: analysis.humor_usage || prev.humor_usage,
+                  analysis.confidence_level || prev.confidence_level || 5,
+                energy_level: analysis.energy_level || prev.energy_level || 5,
+                writing_style_tone:
+                  analysis.tone || prev.writing_style_tone || "professional",
+                humor_usage:
+                  analysis.humor_usage || prev.humor_usage || "minimal",
                 personalization_data: {
                   ...prev.personalization_data,
                   last_analysis: new Date().toISOString(),
@@ -319,6 +375,19 @@ export function WritingProfileContent({
 
   const closeModal = () => {
     setShowCreateModal(false);
+  };
+
+  const handleAddPostsClick = async () => {
+    if (!newSamplePost.trim()) {
+      // If textarea is empty, just focus it
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+      }
+      return;
+    }
+
+    // If there's content, add the post
+    await addSamplePost();
   };
 
   // If no preferences, show loading state while modal handles the creation
@@ -411,7 +480,7 @@ export function WritingProfileContent({
         </div>
 
         <Tabs defaultValue="lexical" className="space-y-8">
-          <TabsList className="grid w-full grid-cols-7 lg:w-3/4 bg-white/70 backdrop-blur border shadow-lg">
+          <TabsList className="grid w-full grid-cols-5 lg:w-3/4 bg-white/70 backdrop-blur border shadow-lg">
             <TabsTrigger
               value="lexical"
               className="data-[state=active]:bg-purple-600 data-[state=active]:text-white"
@@ -433,20 +502,7 @@ export function WritingProfileContent({
               <Volume2 className="h-4 w-4 mr-2" />
               Tone
             </TabsTrigger>
-            <TabsTrigger
-              value="formatting"
-              className="data-[state=active]:bg-purple-600 data-[state=active]:text-white"
-            >
-              <Palette className="h-4 w-4 mr-2" />
-              Format
-            </TabsTrigger>
-            <TabsTrigger
-              value="content"
-              className="data-[state=active]:bg-purple-600 data-[state=active]:text-white"
-            >
-              <MessageSquare className="h-4 w-4 mr-2" />
-              Content
-            </TabsTrigger>
+
             <TabsTrigger
               value="training"
               className="data-[state=active]:bg-purple-600 data-[state=active]:text-white"
@@ -462,9 +518,6 @@ export function WritingProfileContent({
               Insights
             </TabsTrigger>
           </TabsList>
-
-          {/* Continue with all the tab content from the original file... */}
-          {/* This is a truncated version due to length - we need to include all the original tab content */}
 
           {/* Lexical Choices Tab */}
           <TabsContent value="lexical" className="space-y-8">
@@ -514,6 +567,15 @@ export function WritingProfileContent({
                           </Badge>
                         )
                       )}
+                      {(!currentPreferences?.frequently_used_words ||
+                        currentPreferences.frequently_used_words.length ===
+                          0) && (
+                        <div className="text-slate-500 italic">
+                          {editMode
+                            ? "Add words you frequently use in your writing"
+                            : "No frequently used words defined yet"}
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -556,12 +618,19 @@ export function WritingProfileContent({
                           </Badge>
                         )
                       )}
+                      {(!currentPreferences?.industry_jargon ||
+                        currentPreferences.industry_jargon.length === 0) && (
+                        <div className="text-slate-500 italic">
+                          {editMode
+                            ? "Add technical terms specific to your industry"
+                            : "No industry jargon defined yet"}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </CardContent>
               </Card>
 
-              {/* Continue with remaining card for lexical tab... */}
               <Card className="shadow-xl border-0 bg-white/80 backdrop-blur hover:shadow-2xl transition-all duration-300">
                 <CardHeader className="bg-gradient-to-r from-indigo-600 to-blue-600 text-white rounded-t-lg">
                   <CardTitle className="flex items-center gap-2">
@@ -610,6 +679,15 @@ export function WritingProfileContent({
                           </Badge>
                         )
                       )}
+                      {(!currentPreferences?.signature_expressions ||
+                        currentPreferences.signature_expressions.length ===
+                          0) && (
+                        <div className="text-slate-500 italic">
+                          {editMode
+                            ? "Add phrases that are uniquely yours"
+                            : "No signature expressions defined yet"}
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -651,6 +729,14 @@ export function WritingProfileContent({
                             {phrase} {editMode && "×"}
                           </Badge>
                         )
+                      )}
+                      {(!currentPreferences?.never_use_phrases ||
+                        currentPreferences.never_use_phrases.length === 0) && (
+                        <div className="text-slate-500 italic">
+                          {editMode
+                            ? "Add words or phrases you want to avoid"
+                            : "No forbidden phrases defined yet"}
+                        </div>
                       )}
                     </div>
                   </div>
@@ -695,27 +781,874 @@ export function WritingProfileContent({
             </div>
           </TabsContent>
 
-          {/* NOTE: For brevity, I'm truncating here. The full implementation would include all remaining tabs */}
-          {/* You would need to copy all the remaining TabsContent sections from the original file */}
-
-          {/* Placeholder for other tabs - should include Structure, Tone, Formatting, Content, Training, and Insights tabs */}
+          {/* Structure Tab */}
           <TabsContent value="structure" className="space-y-8">
-            <div className="text-center py-20">
-              <p className="text-slate-600">
-                Structure tab content would be here...
-              </p>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              <Card className="shadow-xl border-0 bg-white/80 backdrop-blur hover:shadow-2xl transition-all duration-300">
+                <CardHeader className="bg-gradient-to-r from-teal-600 to-cyan-600 text-white rounded-t-lg">
+                  <CardTitle className="flex items-center gap-2">
+                    <Settings className="h-5 w-5" />
+                    Sentence & Content Structure
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-8 space-y-6">
+                  <div className="space-y-2">
+                    <Label className="text-slate-700 font-medium">
+                      Average Sentence Length
+                    </Label>
+                    {editMode ? (
+                      <Select
+                        value={
+                          currentPreferences.average_sentence_length || "medium"
+                        }
+                        onValueChange={(value) =>
+                          updateField("average_sentence_length", value)
+                        }
+                      >
+                        <SelectTrigger className="shadow-sm border-slate-200">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="short">
+                            Short (5-10 words)
+                          </SelectItem>
+                          <SelectItem value="medium">
+                            Medium (10-20 words)
+                          </SelectItem>
+                          <SelectItem value="long">Long (20+ words)</SelectItem>
+                          <SelectItem value="varied">Varied mix</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <p className="text-slate-900 bg-slate-50 p-3 rounded-lg">
+                        {currentPreferences.average_sentence_length || "Medium"}
+                      </p>
+                    )}
+                  </div>
+
+                  <Separator />
+
+                  <div className="space-y-2">
+                    <Label className="text-slate-700 font-medium">
+                      Content Length Preference
+                    </Label>
+                    {editMode ? (
+                      <Select
+                        value={
+                          currentPreferences.content_length_preference ||
+                          "medium"
+                        }
+                        onValueChange={(value) =>
+                          updateField("content_length_preference", value)
+                        }
+                      >
+                        <SelectTrigger className="shadow-sm border-slate-200">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="short">
+                            Short (100-300 words)
+                          </SelectItem>
+                          <SelectItem value="medium">
+                            Medium (300-600 words)
+                          </SelectItem>
+                          <SelectItem value="long">
+                            Long (600+ words)
+                          </SelectItem>
+                          <SelectItem value="varies">
+                            Varies by topic
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <p className="text-slate-900 bg-slate-50 p-3 rounded-lg">
+                        {currentPreferences.content_length_preference ||
+                          "Medium"}
+                      </p>
+                    )}
+                  </div>
+
+                  <Separator />
+
+                  <div className="space-y-4">
+                    <Label className="text-slate-700 font-medium">
+                      Preferred Structural Patterns
+                    </Label>
+                    {editMode && (
+                      <div className="flex gap-2">
+                        <Input
+                          placeholder="Add structural pattern..."
+                          onKeyPress={(e) => {
+                            if (e.key === "Enter") {
+                              addToArray(
+                                "structural_patterns",
+                                e.currentTarget.value
+                              );
+                              e.currentTarget.value = "";
+                            }
+                          }}
+                          className="shadow-sm border-slate-200"
+                        />
+                      </div>
+                    )}
+                    <div className="flex flex-wrap gap-2">
+                      {currentPreferences?.structural_patterns?.map(
+                        (pattern: string, index: number) => (
+                          <Badge
+                            key={index}
+                            variant="secondary"
+                            className="bg-teal-100 text-teal-800 hover:bg-teal-200 cursor-pointer"
+                            onClick={() =>
+                              editMode &&
+                              removeFromArray("structural_patterns", pattern)
+                            }
+                          >
+                            {pattern} {editMode && "×"}
+                          </Badge>
+                        )
+                      )}
+                      {(!currentPreferences?.structural_patterns ||
+                        currentPreferences.structural_patterns.length ===
+                          0) && (
+                        <div className="text-slate-500 italic">
+                          {editMode
+                            ? "Add patterns like 'Problem-Solution-Benefit', 'Story-Lesson-CTA', etc."
+                            : "No patterns defined yet"}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="shadow-xl border-0 bg-white/80 backdrop-blur hover:shadow-2xl transition-all duration-300">
+                <CardHeader className="bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-t-lg">
+                  <CardTitle className="flex items-center gap-2">
+                    <Target className="h-5 w-5" />
+                    Content Hooks & CTAs
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-8 space-y-6">
+                  <div className="space-y-4">
+                    <Label className="text-slate-700 font-medium">
+                      Preferred Hook Styles
+                    </Label>
+                    {editMode && (
+                      <div className="flex gap-2">
+                        <Input
+                          placeholder="Add hook style..."
+                          onKeyPress={(e) => {
+                            if (e.key === "Enter") {
+                              addToArray(
+                                "preferred_hooks",
+                                e.currentTarget.value
+                              );
+                              e.currentTarget.value = "";
+                            }
+                          }}
+                          className="shadow-sm border-slate-200"
+                        />
+                      </div>
+                    )}
+                    <div className="flex flex-wrap gap-2">
+                      {currentPreferences?.preferred_hooks?.map(
+                        (hook: string, index: number) => (
+                          <Badge
+                            key={index}
+                            variant="secondary"
+                            className="bg-green-100 text-green-800 hover:bg-green-200 cursor-pointer"
+                            onClick={() =>
+                              editMode &&
+                              removeFromArray("preferred_hooks", hook)
+                            }
+                          >
+                            {hook} {editMode && "×"}
+                          </Badge>
+                        )
+                      )}
+                      {(!currentPreferences?.preferred_hooks ||
+                        currentPreferences.preferred_hooks.length === 0) && (
+                        <div className="text-slate-500 italic">
+                          {editMode
+                            ? "Add hooks like 'Question', 'Statistic', 'Personal Story', etc."
+                            : "No hook styles defined yet"}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  <div className="space-y-2">
+                    <Label className="text-slate-700 font-medium">
+                      Storytelling Style
+                    </Label>
+                    {editMode ? (
+                      <Select
+                        value={
+                          currentPreferences.storytelling_style || "balanced"
+                        }
+                        onValueChange={(value) =>
+                          updateField("storytelling_style", value)
+                        }
+                      >
+                        <SelectTrigger className="shadow-sm border-slate-200">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="narrative">
+                            Narrative-heavy
+                          </SelectItem>
+                          <SelectItem value="balanced">Balanced</SelectItem>
+                          <SelectItem value="data-driven">
+                            Data-driven
+                          </SelectItem>
+                          <SelectItem value="minimal">
+                            Minimal storytelling
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <p className="text-slate-900 bg-slate-50 p-3 rounded-lg">
+                        {currentPreferences.storytelling_style || "Balanced"}
+                      </p>
+                    )}
+                  </div>
+
+                  <Separator />
+
+                  <div className="space-y-2">
+                    <Label className="text-slate-700 font-medium">
+                      Question Usage
+                    </Label>
+                    {editMode ? (
+                      <Select
+                        value={currentPreferences.question_usage || "moderate"}
+                        onValueChange={(value) =>
+                          updateField("question_usage", value)
+                        }
+                      >
+                        <SelectTrigger className="shadow-sm border-slate-200">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="frequent">
+                            Frequent questions
+                          </SelectItem>
+                          <SelectItem value="moderate">
+                            Moderate questions
+                          </SelectItem>
+                          <SelectItem value="minimal">
+                            Minimal questions
+                          </SelectItem>
+                          <SelectItem value="rhetorical">
+                            Mostly rhetorical
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <p className="text-slate-900 bg-slate-50 p-3 rounded-lg">
+                        {currentPreferences.question_usage || "Moderate"}
+                      </p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
             </div>
           </TabsContent>
 
+          {/* Tone Tab */}
           <TabsContent value="tone" className="space-y-8">
-            <div className="text-center py-20">
-              <p className="text-slate-600">
-                Tone tab content would be here...
-              </p>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              {/* Voice Characteristics Card */}
+              <Card className="shadow-xl border-0 bg-white/80 backdrop-blur hover:shadow-2xl transition-all duration-300">
+                <CardHeader className="bg-gradient-to-r from-red-600 to-orange-600 text-white rounded-t-lg">
+                  <CardTitle className="flex items-center gap-2">
+                    <Volume2 className="h-5 w-5" />
+                    Voice Characteristics
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-8 space-y-8">
+                  {/* Directness Level */}
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <Label className="text-slate-700 font-medium text-lg">
+                        Directness Level:{" "}
+                        {currentPreferences.directness_level || 5}
+                      </Label>
+                    </div>
+                    {editMode ? (
+                      <Slider
+                        value={[currentPreferences.directness_level || 5]}
+                        onValueChange={(value) =>
+                          updateField("directness_level", value[0])
+                        }
+                        max={10}
+                        min={1}
+                        step={1}
+                        className="w-full"
+                      />
+                    ) : (
+                      <div className="w-full bg-slate-200 rounded-full h-3">
+                        <div
+                          className="bg-orange-500 h-3 rounded-full transition-all duration-300"
+                          style={{
+                            width: `${
+                              ((currentPreferences.directness_level || 5) /
+                                10) *
+                              100
+                            }%`,
+                          }}
+                        />
+                      </div>
+                    )}
+                    <div className="flex justify-between text-sm text-slate-600">
+                      <span>Subtle</span>
+                      <span>Direct</span>
+                    </div>
+                  </div>
+
+                  {/* Confidence Level */}
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <Label className="text-slate-700 font-medium text-lg">
+                        Confidence Level:{" "}
+                        {currentPreferences.confidence_level || 5}
+                      </Label>
+                    </div>
+                    {editMode ? (
+                      <Slider
+                        value={[currentPreferences.confidence_level || 5]}
+                        onValueChange={(value) =>
+                          updateField("confidence_level", value[0])
+                        }
+                        max={10}
+                        min={1}
+                        step={1}
+                        className="w-full"
+                      />
+                    ) : (
+                      <div className="w-full bg-slate-200 rounded-full h-3">
+                        <div
+                          className="bg-blue-500 h-3 rounded-full transition-all duration-300"
+                          style={{
+                            width: `${
+                              ((currentPreferences.confidence_level || 5) /
+                                10) *
+                              100
+                            }%`,
+                          }}
+                        />
+                      </div>
+                    )}
+                    <div className="flex justify-between text-sm text-slate-600">
+                      <span>Humble</span>
+                      <span>Confident</span>
+                    </div>
+                  </div>
+
+                  {/* Energy Level */}
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <Label className="text-slate-700 font-medium text-lg">
+                        Energy Level: {currentPreferences.energy_level || 5}
+                      </Label>
+                    </div>
+                    {editMode ? (
+                      <Slider
+                        value={[currentPreferences.energy_level || 5]}
+                        onValueChange={(value) =>
+                          updateField("energy_level", value[0])
+                        }
+                        max={10}
+                        min={1}
+                        step={1}
+                        className="w-full"
+                      />
+                    ) : (
+                      <div className="w-full bg-slate-200 rounded-full h-3">
+                        <div
+                          className="bg-green-500 h-3 rounded-full transition-all duration-300"
+                          style={{
+                            width: `${
+                              ((currentPreferences.energy_level || 5) / 10) *
+                              100
+                            }%`,
+                          }}
+                        />
+                      </div>
+                    )}
+                    <div className="flex justify-between text-sm text-slate-600">
+                      <span>Calm</span>
+                      <span>Energetic</span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Style Preferences Card */}
+              <Card className="shadow-xl border-0 bg-white/80 backdrop-blur hover:shadow-2xl transition-all duration-300">
+                <CardHeader className="bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-t-lg">
+                  <CardTitle className="flex items-center gap-2">
+                    <Palette className="h-5 w-5" />
+                    Style Preferences
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-8 space-y-8">
+                  {/* Writing Tone */}
+                  <div className="space-y-3">
+                    <Label className="text-slate-700 font-medium text-lg">
+                      Writing Tone
+                    </Label>
+                    {editMode ? (
+                      <Select
+                        value={
+                          currentPreferences.writing_style_tone ||
+                          "professional"
+                        }
+                        onValueChange={(value) =>
+                          updateField("writing_style_tone", value)
+                        }
+                      >
+                        <SelectTrigger className="shadow-sm border-slate-200">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="professional">
+                            Professional
+                          </SelectItem>
+                          <SelectItem value="casual">Casual</SelectItem>
+                          <SelectItem value="friendly">Friendly</SelectItem>
+                          <SelectItem value="authoritative">
+                            Authoritative
+                          </SelectItem>
+                          <SelectItem value="conversational">
+                            Conversational
+                          </SelectItem>
+                          <SelectItem value="inspirational">
+                            Inspirational
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <div className="text-2xl font-semibold text-slate-800 capitalize">
+                        {currentPreferences.writing_style_tone ||
+                          "Professional"}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Humor Usage */}
+                  <div className="space-y-3">
+                    <Label className="text-slate-700 font-medium text-lg">
+                      Humor Usage
+                    </Label>
+                    {editMode ? (
+                      <Select
+                        value={currentPreferences.humor_usage || "minimal"}
+                        onValueChange={(value) =>
+                          updateField("humor_usage", value)
+                        }
+                      >
+                        <SelectTrigger className="shadow-sm border-slate-200">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">No humor</SelectItem>
+                          <SelectItem value="subtle">Subtle humor</SelectItem>
+                          <SelectItem value="minimal">Minimal</SelectItem>
+                          <SelectItem value="occasional">
+                            Occasional humor
+                          </SelectItem>
+                          <SelectItem value="frequent">
+                            Frequent humor
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <div className="text-2xl font-semibold text-slate-800 capitalize">
+                        {currentPreferences.humor_usage || "minimal"}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Question Usage */}
+                  <div className="space-y-3">
+                    <Label className="text-slate-700 font-medium text-lg">
+                      Question Usage
+                    </Label>
+                    {editMode ? (
+                      <Select
+                        value={currentPreferences.question_usage || "moderate"}
+                        onValueChange={(value) =>
+                          updateField("question_usage", value)
+                        }
+                      >
+                        <SelectTrigger className="shadow-sm border-slate-200">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="frequent">
+                            Frequent questions
+                          </SelectItem>
+                          <SelectItem value="moderate">
+                            Moderate questions
+                          </SelectItem>
+                          <SelectItem value="minimal">
+                            Minimal questions
+                          </SelectItem>
+                          <SelectItem value="rhetorical">
+                            Mostly rhetorical
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <div className="text-2xl font-semibold text-slate-800 capitalize">
+                        {currentPreferences.question_usage || "moderate"}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Formality Level */}
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <Label className="text-slate-700 font-medium text-lg">
+                        Formality Level:{" "}
+                        {currentPreferences.writing_style_formality || 5}
+                      </Label>
+                    </div>
+                    {editMode ? (
+                      <Slider
+                        value={[
+                          currentPreferences.writing_style_formality || 5,
+                        ]}
+                        onValueChange={(value) =>
+                          updateField("writing_style_formality", value[0])
+                        }
+                        max={10}
+                        min={1}
+                        step={1}
+                        className="w-full"
+                      />
+                    ) : (
+                      <div className="w-full bg-slate-200 rounded-full h-3">
+                        <div
+                          className="bg-purple-500 h-3 rounded-full transition-all duration-300"
+                          style={{
+                            width: `${
+                              ((currentPreferences.writing_style_formality ||
+                                5) /
+                                10) *
+                              100
+                            }%`,
+                          }}
+                        />
+                      </div>
+                    )}
+                    <div className="flex justify-between text-sm text-slate-600">
+                      <span>Casual</span>
+                      <span>Formal</span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
           </TabsContent>
 
-          {/* Add all other tabs here... */}
+          {/* Training Tab */}
+          <TabsContent value="training" className="space-y-8">
+            <Card className="shadow-xl border-0 bg-white/80 backdrop-blur hover:shadow-2xl transition-all duration-300">
+              <CardHeader className="bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-t-lg">
+                <CardTitle className="flex items-center gap-2">
+                  <Brain className="h-5 w-5" />
+                  Sample Posts Training
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-4">
+                <div className="flex justify-between items-start mb-4">
+                  <div>
+                    <h3 className="text-lg font-semibold text-slate-900 mb-1">
+                      Sample Posts Training
+                    </h3>
+                    <p className="text-slate-600 text-sm">
+                      Add LinkedIn posts to help AI learn your style
+                    </p>
+                  </div>
+                  <Button
+                    onClick={handleAddPostsClick}
+                    disabled={analyzingPost}
+                    className="bg-purple-600 hover:bg-purple-700 ml-4"
+                  >
+                    <Brain className="h-4 w-4 mr-2" />
+                    {newSamplePost.trim()
+                      ? analyzingPost
+                        ? "Analyzing..."
+                        : "Add Post"
+                      : "Add Posts"}
+                  </Button>
+                </div>
+
+                <div className="mb-8">
+                  <Textarea
+                    ref={textareaRef}
+                    placeholder="Paste a sample post to analyze your writing style..."
+                    value={newSamplePost}
+                    onChange={(e) => setNewSamplePost(e.target.value)}
+                    className="min-h-[120px] shadow-sm border-slate-200"
+                  />
+                </div>
+
+                {(localPreferences?.sample_posts?.length || 0) > 0 ? (
+                  <div className="space-y-4">
+                    {(localPreferences?.sample_posts || []).map(
+                      (post: any, index: number) => (
+                        <div
+                          key={index}
+                          className="p-4 bg-purple-50 rounded-lg border border-purple-200"
+                        >
+                          <div className="flex justify-between items-start mb-2">
+                            <span className="text-sm font-medium text-purple-800">
+                              Sample #{index + 1}
+                            </span>
+                            {editMode && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => removeSamplePost(index)}
+                                className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                              >
+                                Remove
+                              </Button>
+                            )}
+                          </div>
+                          <p className="text-slate-700 text-sm line-clamp-3">
+                            {post.content}
+                          </p>
+                          {post.analyzed_at && (
+                            <div className="text-xs text-purple-600 mt-2">
+                              Analyzed:{" "}
+                              {new Date(post.analyzed_at).toLocaleDateString()}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <Brain className="h-12 w-12 text-slate-400 mx-auto mb-2" />
+                    <h3 className="text-lg font-semibold text-slate-900 mb-2">
+                      No sample posts yet
+                    </h3>
+                    <p className="text-slate-600 text-sm">
+                      Add posts to improve AI personalization
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Insights Tab */}
+          <TabsContent value="insights" className="space-y-8">
+            <Card className="shadow-xl border-0 bg-white/80 backdrop-blur hover:shadow-2xl transition-all duration-300">
+              <CardHeader className="bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-t-lg">
+                <CardTitle className="flex items-center gap-2">
+                  <TrendingUp className="h-5 w-5" />
+                  Learning Progress
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-8">
+                {currentPreferences?.sample_posts?.length &&
+                currentPreferences?.sample_posts?.length > 0 ? (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <div className="space-y-6">
+                      <div className="space-y-4">
+                        <Label className="text-slate-700 font-medium text-lg">
+                          Profile Completeness
+                        </Label>
+                        <div className="space-y-2">
+                          <div className="flex justify-between text-sm">
+                            <span>Profile Progress</span>
+                            <span>
+                              {Math.round(
+                                (((currentPreferences?.sample_posts?.length ||
+                                  0) +
+                                  (currentPreferences?.frequently_used_words
+                                    ?.length || 0) +
+                                  (currentPreferences?.voice_attributes
+                                    ?.length || 0)) /
+                                  3) *
+                                  20
+                              )}
+                              %
+                            </span>
+                          </div>
+                          <div className="w-full bg-slate-200 rounded-full h-2">
+                            <div
+                              className="bg-green-600 h-2 rounded-full transition-all duration-300"
+                              style={{
+                                width: `${Math.round(
+                                  (((currentPreferences?.sample_posts?.length ||
+                                    0) +
+                                    (currentPreferences?.frequently_used_words
+                                      ?.length || 0) +
+                                    (currentPreferences?.voice_attributes
+                                      ?.length || 0)) /
+                                    3) *
+                                    20
+                                )}%`,
+                              }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-4">
+                        <Label className="text-slate-700 font-medium text-lg">
+                          Training Data Quality
+                        </Label>
+                        <div className="space-y-3">
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm text-slate-600">
+                              Sample Posts
+                            </span>
+                            <Badge
+                              variant={
+                                currentPreferences?.sample_posts?.length >= 3
+                                  ? "default"
+                                  : "secondary"
+                              }
+                            >
+                              {currentPreferences?.sample_posts?.length || 0}/5
+                            </Badge>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm text-slate-600">
+                              Vocabulary Items
+                            </span>
+                            <Badge
+                              variant={
+                                currentPreferences?.frequently_used_words
+                                  ?.length >= 10
+                                  ? "default"
+                                  : "secondary"
+                              }
+                            >
+                              {currentPreferences?.frequently_used_words
+                                ?.length || 0}
+                              /20
+                            </Badge>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm text-slate-600">
+                              Voice Attributes
+                            </span>
+                            <Badge
+                              variant={
+                                currentPreferences?.voice_attributes?.length >=
+                                5
+                                  ? "default"
+                                  : "secondary"
+                              }
+                            >
+                              {currentPreferences?.voice_attributes?.length ||
+                                0}
+                              /10
+                            </Badge>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-6">
+                      <div className="space-y-4">
+                        <Label className="text-slate-700 font-medium text-lg">
+                          Recent Updates
+                        </Label>
+                        <div className="text-slate-600 text-sm space-y-2">
+                          <div>
+                            Last updated:{" "}
+                            {currentPreferences?.updated_at
+                              ? new Date(
+                                  currentPreferences.updated_at
+                                ).toLocaleDateString()
+                              : "Never"}
+                          </div>
+                          <div>
+                            Created:{" "}
+                            {currentPreferences?.created_at
+                              ? new Date(
+                                  currentPreferences.created_at
+                                ).toLocaleDateString()
+                              : "Unknown"}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-4">
+                        <Label className="text-slate-700 font-medium text-lg">
+                          Recommendations
+                        </Label>
+                        <div className="space-y-2 text-sm">
+                          {currentPreferences?.sample_posts?.length < 3 && (
+                            <div className="p-3 bg-yellow-50 text-yellow-800 rounded-lg">
+                              • Add more sample posts for better style learning
+                            </div>
+                          )}
+                          {currentPreferences?.frequently_used_words?.length <
+                            10 && (
+                            <div className="p-3 bg-blue-50 text-blue-800 rounded-lg">
+                              • Add more frequently used words and phrases
+                            </div>
+                          )}
+                          {currentPreferences?.voice_attributes?.length < 5 && (
+                            <div className="p-3 bg-purple-50 text-purple-800 rounded-lg">
+                              • Define more voice attributes for personality
+                            </div>
+                          )}
+                          {currentPreferences?.sample_posts?.length >= 3 &&
+                            currentPreferences?.frequently_used_words?.length >=
+                              10 &&
+                            currentPreferences?.voice_attributes?.length >=
+                              5 && (
+                              <div className="p-3 bg-green-50 text-green-800 rounded-lg">
+                                ✓ Your profile is well-configured for AI
+                                training!
+                              </div>
+                            )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-16">
+                    <TrendingUp className="h-16 w-16 text-slate-400 mx-auto mb-4" />
+                    <h3 className="text-xl font-semibold text-slate-900 mb-2">
+                      No training data available
+                    </h3>
+                    <p className="text-slate-600 mb-6">
+                      Add sample posts in the Training tab to see AI learning
+                      insights and performance analytics.
+                    </p>
+                    <Button
+                      onClick={() => {
+                        // Switch to training tab
+                        const trainingTab = document.querySelector(
+                          '[data-state="inactive"][value="training"]'
+                        ) as HTMLElement;
+                        if (trainingTab) trainingTab.click();
+                      }}
+                      className="bg-purple-600 hover:bg-purple-700"
+                    >
+                      <Brain className="h-4 w-4 mr-2" />
+                      Go to Training
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
         </Tabs>
       </div>
     </div>

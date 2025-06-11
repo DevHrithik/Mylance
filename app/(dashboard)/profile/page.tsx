@@ -9,15 +9,15 @@ export default async function ProfilePage() {
   const supabase = await createClient();
 
   // Get user authentication
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
-  if (!user) {
+      if (!user) {
     redirect("/login");
   }
 
-  return (
+    return (
     <Suspense fallback={<ProfileSkeleton />}>
       <ProfileServerWrapper userId={user.id} />
     </Suspense>

@@ -9,9 +9,9 @@ export default async function PromptLibraryPage() {
   const supabase = await createClient();
 
   // Get user authentication
-  const {
+      const {
     data: { user },
-  } = await supabase.auth.getUser();
+      } = await supabase.auth.getUser();
 
   if (!user) {
     redirect("/login");

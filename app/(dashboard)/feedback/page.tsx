@@ -29,7 +29,7 @@ async function FeedbackServerWrapper({ userId }: { userId: string }) {
     const data = await getFeedbackData(userId);
 
     return <FeedbackContent initialData={data} userId={userId} />;
-  } catch (error) {
+    } catch (error) {
     console.error("Failed to fetch feedback data:", error);
     return (
       <div className="max-w-2xl mx-auto p-6 text-center">
