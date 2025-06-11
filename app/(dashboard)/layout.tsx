@@ -1,67 +1,44 @@
-"use client";
-
-import { useNetlifyAutoAuth } from "@/components/providers/NetlifyAutoAuthProvider";
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
 import { Sidebar } from "@/components/layout/Sidebar";
-import { Header } from "@/components/layout/Header";
-import { LoadingSpinner } from "@/components/common/LoadingSpinner";
-import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { ClientAuthWrapper } from "@/components/auth/ClientAuthWrapper";
 
-export default function DashboardLayout({
+export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const { isAuthenticated, isLoading, isAdmin, hasCompletedOnboarding } =
-    useNetlifyAutoAuth();
-  const router = useRouter();
+  // Server-side authentication check
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error,
+  } = await supabase.auth.getUser();
 
-  useEffect(() => {
-    // Don't redirect while loading
-    if (isLoading) return;
-
-    // Redirect unauthenticated users to login
-    if (!isAuthenticated) {
-      router.push("/login");
-      return;
-    }
-
-    // Redirect users who haven't completed onboarding (except admins)
-    if (!isAdmin && !hasCompletedOnboarding) {
-      router.push("/onboarding");
-      return;
-    }
-
-    // Note: We deliberately DO NOT redirect admins to /admin here
-    // Let admins access dashboard if they want to
-  }, [isAuthenticated, isLoading, isAdmin, hasCompletedOnboarding, router]);
-
-  // Show loading while checking auth
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <LoadingSpinner size="lg" />
-      </div>
-    );
+  if (error || !user) {
+    redirect("/login");
   }
 
-  // Don't render content if not authenticated
-  if (!isAuthenticated) {
-    return null;
-  }
+  // Check if user has completed onboarding
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("onboarding_completed, is_admin")
+    .eq("id", user.id)
+    .single();
 
-  // Don't render content if user needs onboarding (except admins)
-  if (!isAdmin && !hasCompletedOnboarding) {
-    return null;
+  // Redirect to onboarding if not completed (except for admins)
+  if (!profile?.is_admin && !profile?.onboarding_completed) {
+    redirect("/onboarding");
   }
 
   return (
-    <div className="flex h-screen bg-gray-50">
-      <Sidebar />
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* <Header /> */}
-        <main className="flex-1 overflow-y-auto p-6">{children}</main>
+    <ClientAuthWrapper>
+      <div className="flex h-screen bg-gray-50">
+        <Sidebar />
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <main className="flex-1 overflow-y-auto p-6">{children}</main>
+        </div>
       </div>
-    </div>
+    </ClientAuthWrapper>
   );
 }

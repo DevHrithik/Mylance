@@ -6,6 +6,9 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   reactStrictMode: true,
 
+  // Server external packages for better performance
+  serverExternalPackages: ["@supabase/supabase-js"],
+
   // Experimental features for better performance
   experimental: {
     optimizePackageImports: [

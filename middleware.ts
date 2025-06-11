@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 // Cache for user profiles to reduce database calls
 const profileCache = new Map<string, { data: any; timestamp: number }>();
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+const CACHE_DURATION = 10 * 60 * 1000; // 10 minutes - increased for better performance
 
 // Helper function to create response with Netlify-specific cache headers
 function createNetlifyResponse(
