@@ -168,65 +168,116 @@ export const getUserProfile = unstable_cache(
   }
 );
 
-// Server-side posts data fetching with pagination
-export async function getPostsData(
-  userId: string,
-  limit: number = 50,
-  offset: number = 0
-) {
-  const supabase = createServiceClient();
+// Server-side posts data fetching with pagination and caching
+export const getPostsData = unstable_cache(
+  async (userId: string, limit: number = 50, offset: number = 0) => {
+    const supabase = createServiceClient();
 
-  console.log("Fetching posts for user ID:", userId);
-
-  try {
-    const [postsResponse, countResponse] = await Promise.all([
-      supabase
-        .from("posts")
-        .select(
+    try {
+      const [postsResponse, countResponse, performanceResponse] =
+        await Promise.all([
+          supabase
+            .from("posts")
+            .select(
+              `
+            id, title, content, status, content_type, tone,
+            created_at, updated_at, posted_at, scheduled_date,
+            hashtags, topics, linkedin_url, ai_prompt_used,
+            generation_metadata
           `
-          id, title, content, status, content_type, tone,
-          created_at, updated_at, posted_at, scheduled_date,
-          hashtags, topics, linkedin_url, ai_prompt_used,
-          generation_metadata
-        `
-        )
-        .eq("user_id", userId)
-        .order("created_at", { ascending: false })
-        .range(offset, offset + limit - 1),
+            )
+            .eq("user_id", userId)
+            .order("created_at", { ascending: false })
+            .range(offset, offset + limit - 1),
 
-      supabase
-        .from("posts")
-        .select("*", { count: "exact", head: true })
-        .eq("user_id", userId),
-    ]);
+          supabase
+            .from("posts")
+            .select("*", { count: "exact", head: true })
+            .eq("user_id", userId),
 
-    console.log("Posts response:", postsResponse);
-    console.log("Count response:", countResponse);
+          // Also fetch performance data for user's posts using proper join
+          supabase
+            .from("post_performance")
+            .select(
+              `
+            post_id, impressions, likes, comments, shares, engagement_rate,
+            recorded_at,
+            posts!inner(user_id)
+          `
+            )
+            .eq("posts.user_id", userId)
+            .order("recorded_at", { ascending: false }),
+        ]);
 
-    if (postsResponse.error) {
-      console.error("Posts query error:", postsResponse.error);
-      throw new Error(`Posts query error: ${postsResponse.error.message}`);
+      if (postsResponse.error) {
+        throw new Error(`Posts query error: ${postsResponse.error.message}`);
+      }
+
+      if (countResponse.error) {
+        throw new Error(`Count query error: ${countResponse.error.message}`);
+      }
+
+      const posts = postsResponse.data || [];
+      const performanceData = performanceResponse.data || [];
+
+      // Enhance posts with performance data and analytics flags
+      const enhancedPosts = posts.map((post) => {
+        const performance = performanceData.find(
+          (p) => String(p.post_id) === String(post.id)
+        );
+        const hasAnalytics = !!performance;
+
+        // Check if post needs analytics (posted 5+ days ago without analytics)
+        const needsAnalytics =
+          post.status === "used" &&
+          post.posted_at &&
+          !hasAnalytics &&
+          new Date().getTime() - new Date(post.posted_at).getTime() >
+            5 * 24 * 60 * 60 * 1000;
+
+        return {
+          ...post,
+          hasAnalytics,
+          needsAnalytics,
+          analyticsData: performance
+            ? {
+                impressions: performance.impressions || 0,
+                likes: performance.likes || 0,
+                comments: performance.comments || 0,
+                shares: performance.shares || 0,
+                engagement_rate: performance.engagement_rate || 0,
+              }
+            : undefined,
+        };
+      });
+
+      // Calculate summary stats
+      const stats = {
+        totalPosts: countResponse.count || 0,
+        draftPosts: enhancedPosts.filter((p) => p.status === "draft").length,
+        publishedPosts: enhancedPosts.filter((p) => p.status === "used").length,
+        archivedPosts: enhancedPosts.filter((p) => p.status === "archived")
+          .length,
+        postsNeedingAnalytics: enhancedPosts.filter((p) => p.needsAnalytics)
+          .length,
+      };
+
+      return {
+        posts: enhancedPosts,
+        stats,
+        totalCount: countResponse.count || 0,
+      };
+    } catch (error) {
+      console.error("Posts data error:", error);
+      throw error;
     }
-
-    if (countResponse.error) {
-      console.error("Count query error:", countResponse.error);
-      throw new Error(`Count query error: ${countResponse.error.message}`);
-    }
-
-    console.log("Returning posts data:", {
-      posts: postsResponse.data?.length || 0,
-      totalCount: countResponse.count || 0,
-    });
-
-    return {
-      posts: postsResponse.data || [],
-      totalCount: countResponse.count || 0,
-    };
-  } catch (error) {
-    console.error("Posts data error:", error);
-    throw error; // Re-throw instead of returning empty data
+  },
+  ["posts-data"],
+  {
+    revalidate: 300, // Cache for 5 minutes
+    tags: ["posts"],
   }
-}
+);
 
 // Server-side analytics data fetching
 export const getAnalyticsData = unstable_cache(
@@ -611,55 +662,95 @@ export async function getBillingData(userId: string) {
   }
 }
 
-export async function getFeedbackData(userId: string) {
-  const supabase = createServiceClient();
+// Server-side feedback data fetching
+export const getFeedbackData = unstable_cache(
+  async (userId: string) => {
+    const supabase = createServiceClient();
 
-  try {
-    const [feedbackResponse, repliesResponse] = await Promise.all([
-      supabase
+    try {
+      // Check if feedback table exists by trying to query it
+      const { data: feedbackData, error } = await supabase
         .from("feedback")
         .select("*")
         .eq("user_id", userId)
-        .order("created_at", { ascending: false }),
+        .order("created_at", { ascending: false });
 
-      supabase
-        .from("feedback_replies")
-        .select("*, feedback_id")
-        .in(
-          "feedback_id",
-          (
-            await supabase.from("feedback").select("id").eq("user_id", userId)
-          ).data?.map((f) => f.id) || []
-        )
-        .order("created_at", { ascending: true }),
-    ]);
+      if (error) {
+        // If table doesn't exist or other error, return empty feedback
+        console.log("Feedback table not available:", error.message);
+        return {
+          feedback: [],
+        };
+      }
 
-    if (feedbackResponse.error) throw feedbackResponse.error;
-    if (repliesResponse.error) throw repliesResponse.error;
+      return {
+        feedback: feedbackData || [],
+      };
+    } catch (error) {
+      console.log("Error in getFeedbackData:", error);
+      // Return empty feedback instead of throwing error
+      return {
+        feedback: [],
+      };
+    }
+  },
+  ["feedback-data"],
+  {
+    revalidate: 600, // Cache for 10 minutes
+    tags: ["feedback"],
+  }
+);
 
-    // Group replies by feedback_id
-    const repliesByFeedback = (repliesResponse.data || []).reduce(
-      (acc, reply) => {
-        if (!acc[reply.feedback_id]) acc[reply.feedback_id] = [];
-        acc[reply.feedback_id].push(reply);
-        return acc;
-      },
-      {} as Record<string, any[]>
-    );
+// Server-side profile data fetching
+export const getProfileData = unstable_cache(
+  async (userId: string) => {
+    const supabase = createServiceClient();
 
-    // Attach replies to feedback
-    const feedbackWithReplies = (feedbackResponse.data || []).map(
-      (feedback) => ({
-        ...feedback,
-        replies: repliesByFeedback[feedback.id] || [],
-      })
-    );
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", userId)
+      .single();
+
+    if (error) {
+      throw new Error("Failed to fetch profile data");
+    }
 
     return {
-      feedback: feedbackWithReplies,
+      profile: data,
     };
-  } catch (error) {
-    console.error("Error fetching feedback data:", error);
-    throw error;
+  },
+  ["profile-data"],
+  {
+    revalidate: 600, // Cache for 10 minutes
+    tags: ["profile"],
   }
-}
+);
+
+// Server-side writing profile data fetching
+export const getWritingProfileData = unstable_cache(
+  async (userId: string) => {
+    const supabase = createServiceClient();
+
+    const { data, error } = await supabase
+      .from("user_preferences")
+      .select("*")
+      .eq("user_id", userId)
+      .single();
+
+    if (error && error.code !== "PGRST116") {
+      // PGRST116 = no rows returned
+      throw new Error("Failed to fetch writing profile data");
+    }
+
+    return {
+      preferences: data || null,
+      hasPreferences: !!data,
+    };
+  },
+  ["writing-profile-data"],
+  {
+    revalidate: 600, // Cache for 10 minutes
+    tags: ["writing-profile", "preferences"],
+  }
+);

@@ -1,72 +1,45 @@
-"use client";
+import { Suspense } from "react";
+import { getPromptLibraryData } from "@/lib/supabase/server-queries";
+import { createClient } from "@/lib/supabase/server";
+import { redirect } from "next/navigation";
+import { PromptLibrarySkeleton } from "@/components/dashboard/skeletons/PromptLibrarySkeleton";
+import { PromptLibraryContent } from "@/components/dashboard/PromptLibraryContent";
 
-import { useState, useEffect } from "react";
-import { PromptLibrary } from "@/components/dashboard/PromptLibrary";
-import { createClient } from "@/lib/supabase/client";
-import { LoadingSpinner } from "@/components/common/LoadingSpinner";
-import { toast } from "sonner";
+export default async function PromptLibraryPage() {
+  const supabase = await createClient();
 
-export default function PromptLibraryPage() {
-  const [prompts, setPrompts] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Get user authentication
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  const supabase = createClient();
-
-  const fetchPrompts = async () => {
-    try {
-      setLoading(true);
-
-      // Get user
-      const {
-        data: { user: currentUser },
-      } = await supabase.auth.getUser();
-
-      if (!currentUser) {
-        setLoading(false);
-        return;
-      }
-
-      // Fetch prompts
-      const { data: promptsData, error: promptsError } = await supabase
-        .from("content_prompts")
-        .select("*")
-        .eq("user_id", currentUser.id)
-        .order("created_at", { ascending: false });
-
-      if (promptsError) {
-        console.error("Prompts error:", promptsError);
-        throw promptsError;
-      }
-
-      setPrompts(promptsData || []);
-    } catch (err) {
-      console.error("Error fetching prompts:", err);
-      toast.error("Failed to load prompts");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchPrompts();
-  }, [supabase]);
-
-  if (loading) {
-    return (
-      <div className="p-6 flex items-center justify-center min-h-96">
-        <LoadingSpinner size="lg" />
-      </div>
-    );
+  if (!user) {
+    redirect("/login");
   }
 
   return (
     <div className="p-6">
-      <PromptLibrary
-        prompts={prompts}
-        onPromptsChange={fetchPrompts}
-        activeView="library"
-        onViewChange={() => {}}
-      />
+      <Suspense fallback={<PromptLibrarySkeleton />}>
+        <PromptLibraryServerWrapper userId={user.id} />
+      </Suspense>
     </div>
   );
+}
+
+async function PromptLibraryServerWrapper({ userId }: { userId: string }) {
+  try {
+    const data = await getPromptLibraryData(userId);
+
+    return <PromptLibraryContent initialData={data} userId={userId} />;
+  } catch (error) {
+    console.error("Failed to fetch prompt library data:", error);
+    return (
+      <div className="p-6 text-center">
+        <h3 className="text-lg font-medium text-gray-900 mb-2">
+          Failed to load prompt library
+        </h3>
+        <p className="text-gray-600">Please try refreshing the page.</p>
+      </div>
+    );
+  }
 }

@@ -11,18 +11,47 @@ export function createClient() {
         detectSessionInUrl: true,
         flowType: "pkce",
       },
+      global: {
+        headers: {
+          "cache-control": "no-cache",
+          pragma: "no-cache",
+        },
+      },
+      db: {
+        schema: "public",
+      },
+      realtime: {
+        params: {
+          eventsPerSecond: 2,
+        },
+      },
     }
   );
 }
 
-// Get current user session with error handling
+// Helper function to add timeout to any promise
+function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number = 8000
+): Promise<T> {
+  const timeoutPromise = new Promise<never>((_, reject) =>
+    setTimeout(
+      () => reject(new Error(`Operation timed out after ${timeoutMs}ms`)),
+      timeoutMs
+    )
+  );
+  return Promise.race([promise, timeoutPromise]);
+}
+
+// Get current user session with error handling and timeout
 export async function getSession() {
   const supabase = createClient();
   try {
+    const result = await withTimeout(supabase.auth.getSession(), 5000);
     const {
       data: { session },
       error,
-    } = await supabase.auth.getSession();
+    } = result;
 
     if (error) {
       // Handle refresh token errors
@@ -41,6 +70,11 @@ export async function getSession() {
     return session;
   } catch (error) {
     console.error("Session error:", error);
+    if (error instanceof Error && error.message.includes("timed out")) {
+      console.log("Session check timed out, redirecting to login");
+      // Clear potentially corrupted session data
+      await clearAuthData();
+    }
     return null;
   }
 }
