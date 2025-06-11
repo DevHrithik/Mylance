@@ -3,7 +3,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,7 +14,6 @@ import {
 } from "@/components/ui/dialog";
 import { EngagementChart } from "./EngagementChart";
 import { PerformanceMetrics } from "./PerformanceMetrics";
-import { useAnalytics } from "@/hooks/useAnalytics";
 import {
   TrendingUp,
   TrendingDown,
@@ -42,6 +40,7 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { InsightsRegenerationModal } from "./InsightsRegenerationModal";
+import { toast } from "sonner";
 
 interface LearningInsight {
   category: "working" | "improvement" | "opportunity";
@@ -65,28 +64,41 @@ interface PostDetail {
   content_type: string;
 }
 
-export function AnalyticsDashboard() {
-  const {
-    stats,
-    topPosts,
-    insights,
-    loading,
-    error,
-    refetch,
-    regenerateInsights,
-  } = useAnalytics();
+interface AnalyticsDashboardProps {
+  initialData: {
+    stats: {
+      totalPosts: number;
+      totalImpressions: number;
+      totalLikes: number;
+      totalComments: number;
+      totalShares: number;
+      averageEngagementRate: number;
+    };
+    topPosts: any[];
+    insights: any[];
+  };
+  userId: string;
+}
+
+export function AnalyticsDashboard({
+  initialData,
+  userId,
+}: AnalyticsDashboardProps) {
   const [selectedPost, setSelectedPost] = useState<PostDetail | null>(null);
   const [postDialogOpen, setPostDialogOpen] = useState(false);
   const [regeneratingInsights, setRegeneratingInsights] = useState(false);
   const [showRegenerationModal, setShowRegenerationModal] = useState(false);
 
-  // Debug logging
-  console.log("AnalyticsDashboard render:", {
-    insightsLength: insights?.length,
-    loading,
-    error,
-    insights: insights,
-  });
+  const { stats, topPosts, insights } = initialData;
+
+  // Transform data to match expected format
+  const transformedStats = {
+    ...stats,
+    totalEngagements:
+      stats.totalLikes + stats.totalComments + stats.totalShares,
+    impressionGrowth: 0, // We don't have historical data for growth calculations
+    engagementGrowth: 0,
+  };
 
   // Deduplicate insights based on insight_type to avoid showing the same insight multiple times
   const uniqueInsights = useMemo(() => {
@@ -102,18 +114,25 @@ export function AnalyticsDashboard() {
     });
   }, [insights]);
 
-  console.log(
-    "Unique insights:",
-    uniqueInsights.length,
-    "out of",
-    insights?.length || 0
-  );
-
   const handleRegenerateInsights = async () => {
     setShowRegenerationModal(true);
     setRegeneratingInsights(true);
     try {
-      await regenerateInsights();
+      const response = await fetch("/api/analytics/generate-insights", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to regenerate insights");
+      }
+
+      toast.success("Insights regenerated successfully!");
+      // Optionally trigger a revalidation here
+    } catch (error) {
+      console.error("Error regenerating insights:", error);
+      toast.error("Failed to regenerate insights");
     } finally {
       setRegeneratingInsights(false);
     }
@@ -142,7 +161,7 @@ export function AnalyticsDashboard() {
 
     // Best performing content type
     const contentTypes = topPosts.reduce((acc: any, post) => {
-      const type = post.post?.content_type || "general";
+      const type = post.content_type || "general";
       if (!acc[type]) acc[type] = { count: 0, totalEngagement: 0 };
       acc[type].count++;
       acc[type].totalEngagement += post.engagement_rate;
@@ -209,68 +228,20 @@ export function AnalyticsDashboard() {
     setSelectedPost({
       id: post.id,
       title:
-        post.post?.title ||
-        `${post.post?.content?.substring(0, 50)}...` ||
-        "Untitled Post",
-      content: post.post?.content || "",
+        post.title || `${post.content?.substring(0, 50)}...` || "Untitled Post",
+      content: post.content || "",
       engagement_rate: post.engagement_rate,
       impressions: post.impressions,
       likes: post.likes,
       comments: post.comments,
       shares: post.shares,
-      posted_at: post.post?.posted_at || "",
-      content_type: post.post?.content_type || "general",
+      posted_at: post.posted_at || "",
+      content_type: post.content_type || "general",
     });
     setPostDialogOpen(true);
   };
 
-  if (loading) {
-    return (
-      <div className="space-y-6">
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          {[...Array(4)].map((_, i) => (
-            <Card key={i}>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <Skeleton className="h-4 w-20" />
-                <Skeleton className="h-4 w-4" />
-              </CardHeader>
-              <CardContent>
-                <Skeleton className="h-8 w-16 mb-2" />
-                <Skeleton className="h-3 w-24" />
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-        <div className="grid gap-6 md:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <Skeleton className="h-6 w-32" />
-            </CardHeader>
-            <CardContent>
-              <Skeleton className="h-40 w-full" />
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <Skeleton className="h-6 w-32" />
-            </CardHeader>
-            <CardContent>
-              <Skeleton className="h-40 w-full" />
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <Alert className="border-red-200 bg-red-50">
-        <AlertTriangle className="h-4 w-4" />
-        <AlertDescription className="text-red-800">{error}</AlertDescription>
-      </Alert>
-    );
-  }
+  // Data is already loaded on the server, no need for loading states
 
   return (
     <div className="space-y-6">
@@ -285,24 +256,24 @@ export function AnalyticsDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {stats?.totalImpressions?.toLocaleString() || 0}
+              {transformedStats?.totalImpressions?.toLocaleString() || 0}
             </div>
             <p className="text-xs text-muted-foreground">
-              {stats?.impressionGrowth !== undefined && (
+              {transformedStats?.impressionGrowth !== undefined && (
                 <span
                   className={`flex items-center ${
-                    stats.impressionGrowth >= 0
+                    transformedStats.impressionGrowth >= 0
                       ? "text-green-600"
                       : "text-red-600"
                   }`}
                 >
-                  {stats.impressionGrowth >= 0 ? (
+                  {transformedStats.impressionGrowth >= 0 ? (
                     <ArrowUp className="h-3 w-3 mr-1" />
                   ) : (
                     <ArrowDown className="h-3 w-3 mr-1" />
                   )}
-                  {Math.abs(stats.impressionGrowth).toFixed(1)}% from last
-                  period
+                  {Math.abs(transformedStats.impressionGrowth).toFixed(1)}% from
+                  last period
                 </span>
               )}
             </p>
@@ -318,24 +289,24 @@ export function AnalyticsDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {stats?.totalEngagements?.toLocaleString() || 0}
+              {transformedStats?.totalEngagements?.toLocaleString() || 0}
             </div>
             <p className="text-xs text-muted-foreground">
-              {stats?.engagementGrowth !== undefined && (
+              {transformedStats?.engagementGrowth !== undefined && (
                 <span
                   className={`flex items-center ${
-                    stats.engagementGrowth >= 0
+                    transformedStats.engagementGrowth >= 0
                       ? "text-green-600"
                       : "text-red-600"
                   }`}
                 >
-                  {stats.engagementGrowth >= 0 ? (
+                  {transformedStats.engagementGrowth >= 0 ? (
                     <ArrowUp className="h-3 w-3 mr-1" />
                   ) : (
                     <ArrowDown className="h-3 w-3 mr-1" />
                   )}
-                  {Math.abs(stats.engagementGrowth).toFixed(1)}% from last
-                  period
+                  {Math.abs(transformedStats.engagementGrowth).toFixed(1)}% from
+                  last period
                 </span>
               )}
             </p>
@@ -351,25 +322,25 @@ export function AnalyticsDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {stats?.averageEngagementRate?.toFixed(1) || 0}%
+              {transformedStats?.averageEngagementRate?.toFixed(1) || 0}%
             </div>
             <p className="text-xs text-muted-foreground">
-              {stats?.averageEngagementRate && (
+              {transformedStats?.averageEngagementRate && (
                 <span
                   className={`flex items-center ${
-                    stats.averageEngagementRate >= 2.0
+                    transformedStats.averageEngagementRate >= 2.0
                       ? "text-green-600"
-                      : stats.averageEngagementRate >= 1.0
+                      : transformedStats.averageEngagementRate >= 1.0
                       ? "text-yellow-600"
                       : "text-red-600"
                   }`}
                 >
-                  {stats.averageEngagementRate >= 2.0 ? (
+                  {transformedStats.averageEngagementRate >= 2.0 ? (
                     <>
                       <CheckCircle className="h-3 w-3 mr-1" />
                       Above average
                     </>
-                  ) : stats.averageEngagementRate >= 1.0 ? (
+                  ) : transformedStats.averageEngagementRate >= 1.0 ? (
                     <>
                       <Clock className="h-3 w-3 mr-1" />
                       Average
@@ -394,9 +365,12 @@ export function AnalyticsDashboard() {
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats?.totalPosts || 0}</div>
+            <div className="text-2xl font-bold">
+              {transformedStats?.totalPosts || 0}
+            </div>
             <p className="text-xs text-muted-foreground">
-              {stats?.totalPosts && stats.totalPosts > 0 ? (
+              {transformedStats?.totalPosts &&
+              transformedStats.totalPosts > 0 ? (
                 <span className="text-green-600 flex items-center">
                   <CheckCircle className="h-3 w-3 mr-1" />
                   AI learning active
@@ -549,20 +523,20 @@ export function AnalyticsDashboard() {
                         #{index + 1}
                       </Badge>
                       <Badge variant="secondary" className="text-xs">
-                        {post.post?.content_type || "General"}
+                        {post.content_type || "General"}
                       </Badge>
                       <span className="text-xs text-gray-500">
-                        {post.post?.posted_at &&
-                          new Date(post.post.posted_at).toLocaleDateString()}
+                        {post.posted_at &&
+                          new Date(post.posted_at).toLocaleDateString()}
                       </span>
                     </div>
                     <h4 className="font-medium text-gray-900 mb-1 line-clamp-1">
-                      {post.post?.title ||
-                        `${post.post?.content?.substring(0, 60)}...` ||
+                      {post.title ||
+                        `${post.content?.substring(0, 60)}...` ||
                         "Untitled Post"}
                     </h4>
                     <p className="text-sm text-gray-600 line-clamp-2">
-                      {post.post?.content?.substring(0, 120)}...
+                      {post.content?.substring(0, 120)}...
                     </p>
                   </div>
                   <div className="text-right ml-4">
@@ -860,17 +834,19 @@ export function AnalyticsDashboard() {
                           <Lightbulb className="h-4 w-4 text-yellow-500" />
                           💡 Action Items:
                         </h4>
-                        {insight.recommendations.map((rec, recIndex) => (
-                          <div
-                            key={recIndex}
-                            className="flex items-start gap-2 text-sm text-gray-700 p-2 bg-white rounded border-l-2 border-blue-200"
-                          >
-                            <span className="text-blue-600 font-bold text-xs mt-0.5">
-                              {recIndex + 1}.
-                            </span>
-                            <span>{rec}</span>
-                          </div>
-                        ))}
+                        {insight.recommendations.map(
+                          (rec: string, recIndex: number) => (
+                            <div
+                              key={recIndex}
+                              className="flex items-start gap-2 text-sm text-gray-700 p-2 bg-white rounded border-l-2 border-blue-200"
+                            >
+                              <span className="text-blue-600 font-bold text-xs mt-0.5">
+                                {recIndex + 1}.
+                              </span>
+                              <span>{rec}</span>
+                            </div>
+                          )
+                        )}
                       </div>
 
                       {/* Performance Impact */}

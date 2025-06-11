@@ -9,10 +9,10 @@ export const revalidate = 300; // Revalidate every 5 minutes
 
 async function getAuthenticatedUser() {
   const supabase = await createClient();
-  const {
+        const {
     data: { user },
     error,
-  } = await supabase.auth.getUser();
+        } = await supabase.auth.getUser();
 
   if (error || !user) {
     redirect("/login");
@@ -37,7 +37,7 @@ async function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
       </div>
 
