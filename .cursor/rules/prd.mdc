@@ -1,0 +1,38 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Mylance - AI-Powered LinkedIn Content Creation Platform
+
+## Tech Stack
+- **Frontend**: Next.js 15 (App Router) with TypeScript
+- **Styling**: Tailwind CSS + Shadcn/ui components
+- **Backend**: Supabase (Database, Auth, Edge Functions, Storage)
+- **Payments**: Stripe (Subscriptions)
+- **AI Integration**: OpenAI GPT-4 (via Supabase Edge Functions)
+- **Package Manager**: Bun
+- **Deployment**: Netlify (Frontend) + Supabase (Backend)
+
+## Key Principles
+- **NO Next.js API routes** - Use Supabase Edge Functions for all backend logic
+- **Supabase-first architecture** - Leverage RLS, triggers, and Edge Functions
+- **Type-safe development** - Use TypeScript everywhere with strict mode
+- **Component-driven** - Atomic design with Shadcn/ui components
+## Project Structure
+src/
+├── app/                    # Next.js App Router pages
+├── components/             # Reusable React components
+│   ├── ui/                # Shadcn/ui base components
+│   ├── auth/              # Authentication components
+│   ├── dashboard/         # Dashboard-specific components
+│   ├── posts/             # Post creation/management
+│   └── layout/            # Layout components
+├── lib/                   # Utility libraries
+│   ├── supabase/          # Supabase client configuration
+│   ├── stripe/            # Stripe client setup
+│   ├── utils/             # General utilities
+│   └── types/             # TypeScript type definitions
+├── hooks/                 # Custom React hooks
+├── context/               # React Context providers
+└── constants/             # Application constants

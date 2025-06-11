@@ -1,0 +1,229 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+mylance/
+├── README.md
+├── next.config.js
+├── package.json
+├── tailwind.config.js
+├── tsconfig.json
+├── .cursorrules
+├── .env.local
+├── .env.example
+├── .gitignore
+│
+├── public/
+│   ├── images/
+│   ├── icons/
+│   └── favicon.ico
+│
+├── app/
+│   ├── globals.css
+│   ├── layout.tsx
+│   ├── page.tsx (Landing page)
+│   ├── loading.tsx
+│   ├── error.tsx
+│   ├── not-found.tsx
+│   │
+│   ├── (auth)/
+│   │   ├── login/
+│   │   │   └── page.tsx
+│   │   ├── signup/
+│   │   │   └── page.tsx
+│   │   ├── magic-link/
+│   │   │   └── page.tsx
+│   │   ├── callback/
+│   │   │   └── page.tsx
+│   │   └── layout.tsx
+│   │
+│   ├── (dashboard)/
+│   │   ├── dashboard/
+│   │   │   └── page.tsx
+│   │   ├── onboarding/
+│   │   │   └── page.tsx
+│   │   ├── posts/
+│   │   │   ├── page.tsx
+│   │   │   ├── create/
+│   │   │   │   └── page.tsx
+│   │   │   ├── [id]/
+│   │   │   │   └── page.tsx
+│   │   │   └── history/
+│   │   │       └── page.tsx
+│   │   ├── analytics/
+│   │   │   └── page.tsx
+│   │   ├── profile/
+│   │   │   ├── page.tsx
+│   │   │   └── writing-profile/
+│   │   │       └── page.tsx
+│   │   ├── settings/
+│   │   │   └── page.tsx
+│   │   ├── billing/
+│   │   │   ├── page.tsx
+│   │   │   ├── plans/
+│   │   │   │   └── page.tsx
+│   │   │   └── invoices/
+│   │   │       └── page.tsx
+│   │   └── layout.tsx
+│   │
+│   └── help/
+│       ├── page.tsx
+│       ├── faq/
+│       │   └── page.tsx
+│       ├── contact/
+│       │   └── page.tsx
+│       └── tutorials/
+│           └── page.tsx
+│
+├── components/
+│   ├── ui/ (Shadcn/ui components)
+│   │   ├── button.tsx
+│   │   ├── input.tsx
+│   │   ├── textarea.tsx
+│   │   ├── card.tsx
+│   │   ├── dialog.tsx
+│   │   ├── form.tsx
+│   │   ├── select.tsx
+│   │   ├── table.tsx
+│   │   ├── tabs.tsx
+│   │   ├── toast.tsx
+│   │   ├── progress.tsx
+│   │   ├── skeleton.tsx
+│   │   └── index.ts
+│   │
+│   ├── auth/
+│   │   ├── LoginForm.tsx
+│   │   ├── SignupForm.tsx
+│   │   ├── MagicLinkForm.tsx
+│   │   ├── SocialLoginButtons.tsx
+│   │   └── AuthCallback.tsx
+│   │
+│   ├── dashboard/
+│   │   ├── DashboardHeader.tsx
+│   │   ├── StatsOverview.tsx
+│   │   ├── RecentPosts.tsx
+│   │   ├── QuickActions.tsx
+│   │   ├── PerformanceChart.tsx
+│   │   └── AIUsageStats.tsx
+│   │
+│   ├── onboarding/
+│   │   ├── OnboardingWizard.tsx
+│   │   ├── steps/
+│   │   │   ├── PersonalInfo.tsx
+│   │   │   ├── BusinessProfile.tsx
+│   │   │   ├── ContentGoals.tsx
+│   │   │   ├── WritingStyle.tsx
+│   │   │   └── FinalSetup.tsx
+│   │   ├── ProgressIndicator.tsx
+│   │   └── CompletionScreen.tsx
+│   │
+│   ├── posts/
+│   │   ├── PostEditor.tsx
+│   │   ├── PostPreview.tsx
+│   │   ├── PostList.tsx
+│   │   ├── PostCard.tsx
+│   │   ├── AIContentGenerator.tsx
+│   │   ├── ContentSuggestions.tsx
+│   │   ├── ContentPillars.tsx
+│   │   └── SchedulePost.tsx
+│   │
+│   ├── analytics/
+│   │   ├── AnalyticsDashboard.tsx
+│   │   ├── EngagementChart.tsx
+│   │   ├── PerformanceMetrics.tsx
+│   │   ├── AILearningProgress.tsx
+│   │   └── ContentInsights.tsx
+│   │
+│   ├── billing/
+│   │   ├── SubscriptionPlans.tsx
+│   │   ├── PaymentForm.tsx
+│   │   ├── InvoiceHistory.tsx
+│   │   ├── UsageMetrics.tsx
+│   │   └── CancelSubscription.tsx
+│   │
+│   ├── layout/
+│   │   ├── Header.tsx
+│   │   ├── Sidebar.tsx
+│   │   ├── Footer.tsx
+│   │   ├── Navigation.tsx
+│   │   ├── MobileMenu.tsx
+│   │   └── BreadcrumbNav.tsx
+│   │
+│   └── common/
+│       ├── LoadingSpinner.tsx
+│       ├── ErrorBoundary.tsx
+│       ├── ConfirmDialog.tsx
+│       ├── FileUpload.tsx
+│       ├── SearchBar.tsx
+│       ├── EmptyState.tsx
+│       └── DataTable.tsx
+│
+├── lib/
+│   ├── supabase/
+│   │   ├── client.ts (Browser client)
+│   │   ├── server.ts (Server client)
+│   │   ├── middleware.ts (Auth middleware)
+│   │   └── database.types.ts (Generated types)
+│   │
+│   ├── stripe/
+│   │   ├── client.ts
+│   │   └── config.ts
+│   │
+│   ├── utils/
+│   │   ├── cn.ts (Class name utility)
+│   │   ├── format.ts (Date/number formatting)
+│   │   ├── validation.ts (Form validation)
+│   │   └── constants.ts
+│   │
+│   └── types/
+│       ├── database.ts
+│       ├── auth.ts
+│       ├── posts.ts
+│       └── billing.ts
+│
+├── hooks/
+│   ├── useAuth.ts
+│   ├── useUser.ts
+│   ├── usePosts.ts
+│   ├── useAnalytics.ts
+│   ├── useSubscription.ts
+│   ├── useLocalStorage.ts
+│   ├── useDebounce.ts
+│   └── useSupabaseQuery.ts
+│
+├── context/
+│   ├── AuthProvider.tsx
+│   ├── ThemeProvider.tsx
+│   ├── ToastProvider.tsx
+│   └── QueryProvider.tsx
+│
+├── constants/
+│   ├── routes.ts
+│   ├── subscription-plans.ts
+│   ├── content-types.ts
+│   └── prompts.ts
+│
+├── supabase/ (Supabase project files)
+│   ├── functions/ (Edge Functions)
+│   │   ├── generate-content/
+│   │   │   └── index.ts
+│   │   ├── stripe-webhooks/
+│   │   │   └── index.ts
+│   │   ├── analyze-linkedin/
+│   │   │   └── index.ts
+│   │   └── shared/
+│   │       ├── cors.ts
+│   │       └── auth.ts
+│   │
+│   ├── migrations/
+│   │   
+│   │
+│   ├── seed.sql
+│   └── config.toml
+│
+└── docs/
+    ├── SETUP.md
+    ├── DATABASE.md
+    ├── DEPLOYMENT.md
+    └── API.md
