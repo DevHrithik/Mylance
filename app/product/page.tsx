@@ -68,11 +68,12 @@ export default function ProductPage() {
     }
   };
 
-  useEffect(() => {
-    if (!subscriptionLoading && (hasAccess || isAdmin)) {
-      router.push("/dashboard");
-    }
-  }, [hasAccess, isAdmin, subscriptionLoading, router]);
+  // Temporarily disable auto-redirect to dashboard to prevent errors
+  // useEffect(() => {
+  //   if (!subscriptionLoading && (hasAccess || isAdmin)) {
+  //     router.push("/dashboard");
+  //   }
+  // }, [hasAccess, isAdmin, subscriptionLoading, router]);
 
   if (subscriptionLoading) {
     return (
@@ -85,8 +86,26 @@ export default function ProductPage() {
     );
   }
 
+  // Show go to dashboard button instead of auto-redirect
   if (hasAccess || isAdmin) {
-    return null;
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6">
+        <div className="text-center max-w-md">
+          <h2 className="text-2xl font-bold mb-4">You're All Set!</h2>
+          <p className="text-gray-600 mb-6">
+            {isAdmin
+              ? "You have admin access to Mylance."
+              : "You already have an active subscription."}
+          </p>
+          <Button
+            onClick={() => router.push(isAdmin ? "/admin" : "/dashboard")}
+            className="bg-teal-500 hover:bg-teal-600 text-white px-6 py-3"
+          >
+            Go to {isAdmin ? "Admin Panel" : "Dashboard"}
+          </Button>
+        </div>
+      </div>
+    );
   }
 
   const features = [

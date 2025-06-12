@@ -286,13 +286,18 @@ export async function middleware(request: NextRequest) {
           return createRedirectResponse(url, request);
         } else {
           console.log(
-            "Middleware: Completed user on onboarding, redirecting to dashboard"
+            "Middleware: Completed user on onboarding, redirecting to product page"
           );
           const url = request.nextUrl.clone();
-          url.pathname = "/dashboard";
+          url.pathname = "/product";
           return createRedirectResponse(url, request);
         }
       }
+      return supabaseResponse;
+    }
+
+    // Allow access to product page for payment after onboarding
+    if (pathname.startsWith("/product")) {
       return supabaseResponse;
     }
 

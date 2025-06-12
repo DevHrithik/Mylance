@@ -161,9 +161,43 @@ export function OnboardingWizard() {
 
     // After step 16, save onboarding data and redirect to product page
     if (currentStep === 16) {
-      await handleOnboardingDataSubmit();
-      // Redirect to product page after saving data
-      router.push("/product");
+      setIsLoading(true);
+      console.log("Step 16: Starting onboarding completion process...");
+
+      try {
+        console.log("Step 16: Saving onboarding data...");
+        await handleOnboardingDataSubmit();
+        console.log(
+          "Step 16: Data saved successfully, redirecting to product page..."
+        );
+
+        // Redirect to product page for payment
+        console.log(
+          "Onboarding completed! Redirecting to product page for plan selection..."
+        );
+
+        // Method 1: Immediate router push to product
+        router.push("/product");
+
+        // Method 2: Delayed router push
+        setTimeout(() => {
+          console.log("Executing delayed redirect to /product");
+          router.push("/product");
+        }, 100);
+
+        // Method 3: Browser location as final fallback
+        setTimeout(() => {
+          console.log("Executing browser redirect to /product as fallback");
+          window.location.href = "/product";
+        }, 500);
+        return;
+      } catch (err: any) {
+        console.error("Failed to complete onboarding:", err);
+        setError(
+          err.message || "Failed to save your information. Please try again."
+        );
+        setIsLoading(false);
+      }
       return;
     }
 
@@ -174,7 +208,6 @@ export function OnboardingWizard() {
   };
 
   const handleOnboardingDataSubmit = async () => {
-    setIsLoading(true);
     setError(null);
 
     try {
@@ -207,7 +240,10 @@ export function OnboardingWizard() {
         client_pain_points: data.clientPainPoints,
         unique_value_proposition: data.uniqueValueProposition,
         proof_points: data.proofPoints,
-        heard_about_mylance: data.heardAboutMylance,
+        heard_about_mylance:
+          data.heardAboutMylance === "Other (please specify)"
+            ? data.heardAboutMylanceOther || data.heardAboutMylance
+            : data.heardAboutMylance,
         profile_locked: true, // Lock profile until payment/completion
         onboarding_completed: true, // Mark onboarding as completed
         updated_at: new Date().toISOString(),
@@ -242,10 +278,9 @@ export function OnboardingWizard() {
 
       if (preferencesError) {
         console.error("Preferences update error:", preferencesError);
-        throw new Error(
-          `Preferences update failed: ${
-            preferencesError.message || JSON.stringify(preferencesError)
-          }`
+        // Don't throw error for preferences - not critical for flow
+        console.warn(
+          "User preferences could not be saved, but onboarding will continue"
         );
       }
 
@@ -254,8 +289,6 @@ export function OnboardingWizard() {
       console.error("Onboarding data save error:", err);
       setError(err.message || "Something went wrong. Please try again.");
       throw err;
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -273,10 +306,30 @@ export function OnboardingWizard() {
     });
   };
 
+  const getValidationError = () => {
+    switch (currentStep) {
+      case 1:
+        if (!data.email.trim()) return "Please enter your email address";
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(data.email.trim()))
+          return "Please enter a valid email address";
+        return null;
+      case 2:
+        if (!data.linkedinUrl.trim()) return "Please enter your LinkedIn URL";
+        if (!data.linkedinUrl.includes("linkedin.com"))
+          return "Please enter a valid LinkedIn URL";
+        return null;
+      default:
+        return null;
+    }
+  };
+
   const validateStep = () => {
     switch (currentStep) {
       case 1:
-        return data.email.includes("@");
+        // Improved email validation
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        return emailRegex.test(data.email.trim());
       case 2:
         return data.linkedinUrl.includes("linkedin.com");
       case 3:
@@ -317,6 +370,23 @@ export function OnboardingWizard() {
     }
   };
 
+  // Add keyboard event handler for Enter key
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey && validateStep() && !isLoading) {
+      e.preventDefault();
+      handleNext();
+    }
+  };
+
+  // Special handler for textareas - allows Shift+Enter for line breaks
+  const handleTextareaKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey && validateStep() && !isLoading) {
+      e.preventDefault();
+      handleNext();
+    }
+    // Allow Shift+Enter for line breaks in textareas
+  };
+
   const renderStep = () => {
     const commonClasses =
       "min-h-screen flex items-center justify-center p-6 relative overflow-hidden";
@@ -351,9 +421,15 @@ export function OnboardingWizard() {
                   type="email"
                   value={data.email}
                   onChange={(e) => updateData("email", e.target.value)}
+                  onKeyDown={handleKeyDown}
                   placeholder="hrithikroy@buildmvpfa.st"
                   className="text-xl border-0 border-b-4 border-teal-500 rounded-none bg-transparent focus:ring-0 focus:outline-none text-center placeholder:text-gray-400"
                 />
+                {data.email && !validateStep() && (
+                  <p className="text-red-500 text-sm mt-2">
+                    {getValidationError()}
+                  </p>
+                )}
               </div>
 
               <Button
@@ -393,9 +469,15 @@ export function OnboardingWizard() {
                   type="url"
                   value={data.linkedinUrl}
                   onChange={(e) => updateData("linkedinUrl", e.target.value)}
+                  onKeyDown={handleKeyDown}
                   placeholder="https://"
                   className="text-xl border-0 border-b-4 border-teal-500 rounded-none bg-transparent focus:ring-0 focus:outline-none text-center placeholder:text-gray-400"
                 />
+                {data.linkedinUrl && !validateStep() && (
+                  <p className="text-red-500 text-sm mt-2">
+                    {getValidationError()}
+                  </p>
+                )}
               </div>
 
               <Button
@@ -430,6 +512,7 @@ export function OnboardingWizard() {
                   type="text"
                   value={data.firstName}
                   onChange={(e) => updateData("firstName", e.target.value)}
+                  onKeyDown={handleKeyDown}
                   placeholder="Type your answer here..."
                   className="text-xl border-0 border-b-4 border-teal-500 rounded-none bg-transparent focus:ring-0 focus:outline-none text-center placeholder:text-gray-400"
                 />
@@ -980,6 +1063,7 @@ export function OnboardingWizard() {
                   onChange={(e) =>
                     updateData("idealTargetClient", e.target.value)
                   }
+                  onKeyDown={handleTextareaKeyDown}
                   placeholder="Type your answer here..."
                   className="min-h-32 text-xl border-0 border-b-4 border-teal-500 rounded-none bg-transparent focus:ring-0 focus:outline-none resize-none placeholder:text-gray-400"
                 />
@@ -1027,6 +1111,7 @@ export function OnboardingWizard() {
                   onChange={(e) =>
                     updateData("clientPainPoints", e.target.value)
                   }
+                  onKeyDown={handleTextareaKeyDown}
                   placeholder="Type your answer here..."
                   className="min-h-32 text-xl border-0 border-b-4 border-teal-500 rounded-none bg-transparent focus:ring-0 focus:outline-none resize-none placeholder:text-gray-400"
                 />
@@ -1076,6 +1161,7 @@ export function OnboardingWizard() {
                   onChange={(e) =>
                     updateData("uniqueValueProposition", e.target.value)
                   }
+                  onKeyDown={handleTextareaKeyDown}
                   placeholder="Type your answer here..."
                   className="min-h-32 text-xl border-0 border-b-4 border-teal-500 rounded-none bg-transparent focus:ring-0 focus:outline-none resize-none placeholder:text-gray-400"
                 />
@@ -1126,6 +1212,7 @@ export function OnboardingWizard() {
                 <Textarea
                   value={data.proofPoints}
                   onChange={(e) => updateData("proofPoints", e.target.value)}
+                  onKeyDown={handleTextareaKeyDown}
                   placeholder="Type your answer here..."
                   className="min-h-32 text-xl border-0 border-b-4 border-teal-500 rounded-none bg-transparent focus:ring-0 focus:outline-none resize-none placeholder:text-gray-400"
                 />
@@ -1203,6 +1290,7 @@ export function OnboardingWizard() {
                     onChange={(e) =>
                       updateData("heardAboutMylanceOther", e.target.value)
                     }
+                    onKeyDown={handleKeyDown}
                     placeholder="Please specify..."
                     className="text-xl border-0 border-b-4 border-teal-500 rounded-none bg-transparent focus:ring-0 focus:outline-none text-center placeholder:text-gray-400"
                   />

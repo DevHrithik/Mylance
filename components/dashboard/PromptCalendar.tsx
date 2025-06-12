@@ -26,6 +26,13 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 
 interface ContentPrompt {
   id: number;
@@ -283,6 +290,238 @@ export function PromptCalendar({
     }
   };
 
+  // Component for rendering a prompt card
+  const PromptCard = ({
+    prompt,
+    index,
+  }: {
+    prompt: ContentPrompt;
+    index: number;
+  }) => (
+    <Card className="border border-gray-200 bg-white flex flex-col h-[480px]">
+      <CardContent className="p-4 flex flex-col h-full">
+        {/* Upper section - fixed height */}
+        <div className="flex-shrink-0 space-y-3">
+          {/* Upper right corner status */}
+          <div className="flex items-start justify-between">
+            <div className="flex items-center space-x-1">
+              {/* Rating stars */}
+              <div onClick={(e) => e.stopPropagation()}>
+                <QuickRating type="prompt" targetId={prompt.id} />
+              </div>
+            </div>
+            <div className="flex items-center space-x-1">
+              <Badge
+                variant={prompt.is_used ? "secondary" : "secondary"}
+                className={`text-xs px-2 py-1 ${
+                  prompt.is_used
+                    ? "bg-slate-100 text-slate-700 border-slate-200"
+                    : "bg-green-50 text-green-700 border-green-200"
+                }`}
+              >
+                {prompt.is_used ? "Used" : "New"}
+              </Badge>
+              {!prompt.is_used ? (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleArchivePrompt(prompt.id);
+                        }}
+                        className="h-5 w-5 p-1 text-gray-500 hover:text-gray-700"
+                      >
+                        <Archive className="h-3 w-3" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Archive this prompt</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              ) : (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleUnarchivePrompt(prompt.id);
+                        }}
+                        className="h-5 w-5 p-1 text-blue-500 hover:text-blue-700"
+                      >
+                        <Archive className="h-3 w-3 rotate-180" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Unarchive this prompt</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
+            </div>
+          </div>
+
+          {/* Type of post with feedback button */}
+          <div className="flex items-center justify-between">
+            <Badge
+              variant="outline"
+              className="text-xs px-2 py-1 bg-blue-50 text-blue-700 border-blue-200"
+            >
+              {prompt.category}
+            </Badge>
+            <div onClick={(e) => e.stopPropagation()}>
+              <FeedbackButton
+                type="prompt"
+                targetId={prompt.id}
+                title={prompt.hook}
+                content={prompt.prompt_text}
+                variant="ghost"
+                size="sm"
+                className="text-xs h-6 px-2"
+              >
+                📝
+              </FeedbackButton>
+            </div>
+          </div>
+        </div>
+
+        {/* Content section - flexible height */}
+        <div className="flex-1 min-h-0 space-y-3 mt-3">
+          {/* Hook */}
+          <div>
+            <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
+              HOOK
+            </div>
+            <div className="max-h-20 overflow-hidden">
+              <p className="text-sm text-gray-900 leading-relaxed">
+                {prompt.hook}
+              </p>
+              {prompt.hook.length > 80 && (
+                <div className="text-xs text-gray-500 mt-1">
+                  <Dialog>
+                    <DialogTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-auto p-0 text-blue-600 hover:text-blue-800"
+                      >
+                        Read more...
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+                      <DialogHeader>
+                        <DialogTitle>Full Content</DialogTitle>
+                      </DialogHeader>
+                      <div className="space-y-4">
+                        <div>
+                          <h4 className="font-semibold text-gray-600 uppercase tracking-wide mb-2">
+                            HOOK
+                          </h4>
+                          <p className="text-sm text-gray-900 leading-relaxed">
+                            {prompt.hook}
+                          </p>
+                        </div>
+                        <div>
+                          <h4 className="font-semibold text-gray-600 uppercase tracking-wide mb-2">
+                            PROMPT
+                          </h4>
+                          <p className="text-sm text-gray-700 leading-relaxed">
+                            {prompt.prompt_text}
+                          </p>
+                        </div>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Prompt */}
+          <div className="flex-1 min-h-0">
+            <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
+              PROMPT
+            </div>
+            <div className="max-h-40 overflow-hidden">
+              <p className="text-sm text-gray-700 leading-relaxed">
+                {prompt.prompt_text}
+              </p>
+              {prompt.prompt_text.length > 150 && (
+                <div className="text-xs text-gray-500 mt-1">
+                  <Dialog>
+                    <DialogTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-auto p-0 text-blue-600 hover:text-blue-800"
+                      >
+                        Read more...
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+                      <DialogHeader>
+                        <DialogTitle>Full Content</DialogTitle>
+                      </DialogHeader>
+                      <div className="space-y-4">
+                        <div>
+                          <h4 className="font-semibold text-gray-600 uppercase tracking-wide mb-2">
+                            HOOK
+                          </h4>
+                          <p className="text-sm text-gray-900 leading-relaxed">
+                            {prompt.hook}
+                          </p>
+                        </div>
+                        <div>
+                          <h4 className="font-semibold text-gray-600 uppercase tracking-wide mb-2">
+                            PROMPT
+                          </h4>
+                          <p className="text-sm text-gray-700 leading-relaxed">
+                            {prompt.prompt_text}
+                          </p>
+                        </div>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Button section - fixed at bottom */}
+        <div className="flex-shrink-0 mt-4">
+          <Button
+            size="sm"
+            onClick={() => handlePickPrompt(prompt)}
+            disabled={prompt.is_used}
+            className="w-full bg-gray-900 hover:bg-gray-800 text-white text-sm py-2 disabled:bg-gray-400 disabled:cursor-not-allowed"
+          >
+            <Sparkles className="h-4 w-4 mr-2" />
+            {prompt.is_used ? "Used" : "Select"}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+
+  // Component for empty prompt slot
+  const EmptyPromptCard = ({ slotText }: { slotText: string }) => (
+    <Card className="border border-dashed border-gray-300 bg-gray-50 flex flex-col h-[480px]">
+      <CardContent className="p-4 flex-1 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-sm text-gray-400 mb-1">No prompt</div>
+          <div className="text-sm text-gray-400">{slotText}</div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+
   return (
     <div className="w-full space-y-6">
       <Card className="w-full h-full flex flex-col">
@@ -380,307 +619,16 @@ export function PromptCalendar({
 
                   {/* First Prompt */}
                   {day.prompts[0] ? (
-                    <Card className="border border-gray-200 bg-white flex-1 flex flex-col min-h-[320px]">
-                      <CardContent className="p-4 flex-1 flex flex-col space-y-4">
-                        {/* Upper right corner status */}
-                        <div className="flex items-start justify-between flex-shrink-0">
-                          <div className="flex items-center space-x-1">
-                            {/* Rating stars */}
-                            <div onClick={(e) => e.stopPropagation()}>
-                              <QuickRating
-                                type="prompt"
-                                targetId={day.prompts[0]!.id}
-                              />
-                            </div>
-                          </div>
-                          <div className="flex items-center space-x-1">
-                            <Badge
-                              variant={
-                                day.prompts[0]!.is_used
-                                  ? "destructive"
-                                  : "secondary"
-                              }
-                              className="text-xs px-2 py-1"
-                            >
-                              {day.prompts[0]!.is_used ? "Used" : "New"}
-                            </Badge>
-                            {!day.prompts[0]!.is_used ? (
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleArchivePrompt(day.prompts[0]!.id);
-                                      }}
-                                      className="h-5 w-5 p-1 text-gray-500 hover:text-gray-700"
-                                    >
-                                      <Archive className="h-3 w-3" />
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p>Archive this prompt</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-                            ) : (
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleUnarchivePrompt(
-                                          day.prompts[0]!.id
-                                        );
-                                      }}
-                                      className="h-5 w-5 p-1 text-blue-500 hover:text-blue-700"
-                                    >
-                                      <Archive className="h-3 w-3 rotate-180" />
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p>Unarchive this prompt</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Type of post with feedback button */}
-                        <div className="flex items-center justify-between flex-shrink-0">
-                          <Badge
-                            variant="outline"
-                            className="text-xs px-2 py-1 bg-blue-50 text-blue-700 border-blue-200"
-                          >
-                            {day.prompts[0].category}
-                          </Badge>
-                          <div onClick={(e) => e.stopPropagation()}>
-                            <FeedbackButton
-                              type="prompt"
-                              targetId={day.prompts[0]!.id}
-                              title={day.prompts[0]!.hook}
-                              content={day.prompts[0]!.prompt_text}
-                              variant="ghost"
-                              size="sm"
-                              className="text-xs h-6 px-2"
-                            >
-                              📝
-                            </FeedbackButton>
-                          </div>
-                        </div>
-
-                        {/* Hook */}
-                        <div className="flex-shrink-0">
-                          <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">
-                            HOOK
-                          </div>
-                          <p className="text-sm text-gray-900 leading-relaxed line-clamp-3">
-                            {day.prompts[0]!.hook}
-                          </p>
-                        </div>
-
-                        {/* Prompt */}
-                        <div className="flex-1 min-h-0">
-                          <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">
-                            PROMPT
-                          </div>
-                          <p className="text-sm text-gray-700 leading-relaxed overflow-y-auto h-full line-clamp-6">
-                            {day.prompts[0]!.prompt_text}
-                          </p>
-                        </div>
-
-                        {/* Spacing before button */}
-                        <div className="mt-4"></div>
-
-                        {/* Select Prompt Button */}
-                        <div className="flex-shrink-0 pt-2">
-                          <Button
-                            size="sm"
-                            onClick={() => handlePickPrompt(day.prompts[0]!)}
-                            disabled={day.prompts[0]!.is_used}
-                            className="w-full bg-gray-900 hover:bg-gray-800 text-white text-sm py-2 disabled:bg-gray-400 disabled:cursor-not-allowed"
-                          >
-                            <Sparkles className="h-4 w-4 mr-2" />
-                            {day.prompts[0]!.is_used ? "Used" : "Select"}
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
+                    <PromptCard prompt={day.prompts[0]} index={0} />
                   ) : (
-                    <Card className="border border-dashed border-gray-300 bg-gray-50 flex-1 flex flex-col min-h-[320px]">
-                      <CardContent className="p-4 flex-1 flex items-center justify-center">
-                        <div className="text-center">
-                          <div className="text-sm text-gray-400 mb-1">
-                            No prompt
-                          </div>
-                          <div className="text-sm text-gray-400">
-                            for this slot
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
+                    <EmptyPromptCard slotText="for this slot" />
                   )}
 
                   {/* Second Prompt */}
                   {day.prompts[1] ? (
-                    <Card className="border border-gray-200 bg-white flex-1 flex flex-col min-h-[320px]">
-                      <CardContent className="p-4 flex-1 flex flex-col space-y-4">
-                        {/* Upper right corner status */}
-                        <div className="flex items-start justify-between flex-shrink-0">
-                          <div className="flex items-center space-x-1">
-                            {/* Rating stars */}
-                            <div onClick={(e) => e.stopPropagation()}>
-                              <QuickRating
-                                type="prompt"
-                                targetId={day.prompts[1]!.id}
-                              />
-                            </div>
-                          </div>
-                          <div className="flex items-center space-x-1">
-                            <Badge
-                              variant={
-                                day.prompts[1]!.is_used
-                                  ? "destructive"
-                                  : "secondary"
-                              }
-                              className="text-xs px-2 py-1"
-                            >
-                              {day.prompts[1]!.is_used ? "Used" : "New"}
-                            </Badge>
-                            {!day.prompts[1]!.is_used ? (
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleArchivePrompt(day.prompts[1]!.id);
-                                      }}
-                                      className="h-5 w-5 p-1 text-gray-500 hover:text-gray-700"
-                                    >
-                                      <Archive className="h-3 w-3" />
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p>Archive this prompt</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-                            ) : (
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleUnarchivePrompt(
-                                          day.prompts[1]!.id
-                                        );
-                                      }}
-                                      className="h-5 w-5 p-1 text-blue-500 hover:text-blue-700"
-                                    >
-                                      <Archive className="h-3 w-3 rotate-180" />
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p>Unarchive this prompt</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Type of post with feedback button */}
-                        <div className="flex items-center justify-between flex-shrink-0">
-                          <Badge
-                            variant="outline"
-                            className="text-xs px-2 py-1 bg-blue-50 text-blue-700 border-blue-200"
-                          >
-                            {day.prompts[1]!.category}
-                          </Badge>
-                          <div onClick={(e) => e.stopPropagation()}>
-                            <FeedbackButton
-                              type="prompt"
-                              targetId={day.prompts[1]!.id}
-                              title={day.prompts[1]!.hook}
-                              content={day.prompts[1]!.prompt_text}
-                              variant="ghost"
-                              size="sm"
-                              className="text-xs h-6 px-2"
-                            >
-                              📝
-                            </FeedbackButton>
-                          </div>
-                        </div>
-
-                        {/* Hook */}
-                        <div className="flex-shrink-0">
-                          <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">
-                            HOOK
-                          </div>
-                          <p className="text-sm text-gray-900 leading-relaxed line-clamp-3">
-                            {day.prompts[1]!.hook}
-                          </p>
-                        </div>
-
-                        {/* Prompt */}
-                        <div className="flex-1 min-h-0">
-                          <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">
-                            PROMPT
-                          </div>
-                          <p className="text-sm text-gray-700 leading-relaxed overflow-y-auto h-full line-clamp-6">
-                            {day.prompts[1]!.prompt_text}
-                          </p>
-                        </div>
-
-                        {/* Spacing before button */}
-                        <div className="mt-4"></div>
-
-                        {/* Select Prompt Button */}
-                        <div className="flex-shrink-0 pt-2">
-                          <Button
-                            size="sm"
-                            onClick={() => handlePickPrompt(day.prompts[1]!)}
-                            disabled={day.prompts[1]!.is_used}
-                            className="w-full bg-gray-900 hover:bg-gray-800 text-white text-sm py-2 disabled:bg-gray-400 disabled:cursor-not-allowed"
-                          >
-                            <Sparkles className="h-4 w-4 mr-2" />
-                            {day.prompts[1]!.is_used ? "Used" : "Select"}
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
+                    <PromptCard prompt={day.prompts[1]} index={1} />
                   ) : (
-                    <Card className="border border-dashed border-gray-300 bg-gray-50 flex-1 flex flex-col min-h-[320px]">
-                      <CardContent className="p-4 flex-1 flex items-center justify-center">
-                        <div className="text-center">
-                          <div className="text-sm text-gray-400 mb-1">
-                            No other prompt
-                          </div>
-                          <div className="text-sm text-gray-400">
-                            for the day
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  )}
-
-                  {/* More prompts indicator if there are more than 2 */}
-                  {day.prompts.length > 2 && (
-                    <div className="text-sm text-gray-500 text-center py-2 bg-orange-50 rounded border border-orange-200">
-                      +{day.prompts.length - 2} more
-                    </div>
+                    <EmptyPromptCard slotText="for the day" />
                   )}
                 </div>
               ))}

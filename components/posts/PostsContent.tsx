@@ -48,6 +48,7 @@ import {
   Search,
   Filter,
   RefreshCw,
+  MoreHorizontal,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -112,6 +113,8 @@ interface PostsContentProps {
     status?: string;
     type?: string;
     search?: string;
+    draft?: string;
+    updated?: string;
   };
 }
 
@@ -129,6 +132,35 @@ const statusColors = {
   used: "bg-green-100 text-green-700 border-green-200",
   archived: "bg-orange-100 text-orange-700 border-orange-200",
 };
+
+// PostContentPreview component with Read More functionality
+function PostContentPreview({ content }: { content: string }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const maxLength = 150; // Characters to show before "Read more"
+
+  const shouldShowReadMore = content.length > maxLength;
+  const displayContent =
+    isExpanded || !shouldShowReadMore
+      ? content
+      : content.substring(0, maxLength) + "...";
+
+  return (
+    <div className="text-sm text-gray-600 mb-3 flex-grow">
+      <p className={`${isExpanded ? "" : "line-clamp-3"}`}>{displayContent}</p>
+      {shouldShowReadMore && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setIsExpanded(!isExpanded);
+          }}
+          className="text-blue-600 hover:text-blue-800 text-xs font-medium mt-1 transition-colors"
+        >
+          {isExpanded ? "Read less" : "Read more"}
+        </button>
+      )}
+    </div>
+  );
+}
 
 export function PostsContent({
   initialData,
@@ -150,7 +182,10 @@ export function PostsContent({
     notes: "",
   });
 
-  // Local filter states
+  const [highlightedPostId, setHighlightedPostId] = useState<string | null>(
+    null
+  );
+
   const [searchTerm, setSearchTerm] = useState(searchParams.search || "");
   const [statusFilter, setStatusFilter] = useState(
     searchParams.status || "all"
@@ -172,7 +207,29 @@ export function PostsContent({
     }
   };
 
-  // Apply filters to posts
+  useEffect(() => {
+    const draftId = searchParams.draft;
+    const updatedId = searchParams.updated;
+
+    if (draftId || updatedId) {
+      const targetId = draftId || updatedId;
+      setHighlightedPostId(targetId || null);
+
+      const message = draftId
+        ? "Post saved as draft successfully!"
+        : "Post updated successfully!";
+      toast.success(message);
+
+      setTimeout(() => {
+        setHighlightedPostId(null);
+        const newUrl = new URL(window.location.href);
+        newUrl.searchParams.delete("draft");
+        newUrl.searchParams.delete("updated");
+        window.history.replaceState({}, "", newUrl.toString());
+      }, 3000);
+    }
+  }, [searchParams.draft, searchParams.updated]);
+
   useEffect(() => {
     let filtered = data.posts;
 
@@ -195,60 +252,61 @@ export function PostsContent({
     setFilteredPosts(filtered);
   }, [data.posts, searchTerm, statusFilter, typeFilter]);
 
-  // Sort posts: upcoming drafts first, then regular drafts (newest), then posted (newest)
   const sortedPosts = useMemo(() => {
     return [...filteredPosts].sort((a, b) => {
+      if (highlightedPostId) {
+        if (a.id === highlightedPostId) return -1;
+        if (b.id === highlightedPostId) return 1;
+      }
+
       const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-      // Check if posts are upcoming scheduled drafts
-      const aIsUpcomingDraft =
-        a.status === "draft" &&
-        a.scheduled_date &&
-        new Date(a.scheduled_date) > now;
-      const bIsUpcomingDraft =
-        b.status === "draft" &&
-        b.scheduled_date &&
-        new Date(b.scheduled_date) > now;
+      const aScheduled =
+        a.scheduled_date && new Date(a.scheduled_date) >= today;
+      const bScheduled =
+        b.scheduled_date && new Date(b.scheduled_date) >= today;
 
-      // 1. Upcoming drafts first (sorted by scheduled date, nearest first)
-      if (aIsUpcomingDraft && !bIsUpcomingDraft) return -1;
-      if (!aIsUpcomingDraft && bIsUpcomingDraft) return 1;
-      if (aIsUpcomingDraft && bIsUpcomingDraft) {
+      if (aScheduled && !bScheduled) return -1;
+      if (!aScheduled && bScheduled) return 1;
+
+      if (aScheduled && bScheduled) {
         return (
           new Date(a.scheduled_date!).getTime() -
           new Date(b.scheduled_date!).getTime()
         );
       }
 
-      // 2. Then drafts vs posted content
       if (a.status === "draft" && b.status !== "draft") return -1;
       if (a.status !== "draft" && b.status === "draft") return 1;
 
-      // 3. Within same status, sort by creation date (newest first)
       return (
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       );
     });
-  }, [filteredPosts]);
+  }, [filteredPosts, highlightedPostId]);
 
-  // Manual refresh function
   const refetch = async () => {
     setLoading(true);
     try {
       const response = await fetch(`/api/posts/refresh?userId=${userId}`, {
         method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
       });
 
       if (!response.ok) {
-        throw new Error("Failed to refresh data");
+        throw new Error("Failed to refresh posts");
       }
 
-      const newData = await response.json();
-      setData(newData);
-      toast.success("Posts refreshed");
+      const refreshedData = await response.json();
+      setData(refreshedData);
+      toast.success("Posts refreshed successfully");
     } catch (error) {
-      console.error("Error refreshing posts:", error);
+      console.error("Refresh error:", error);
       toast.error("Failed to refresh posts");
+      handleAuthError(error);
     } finally {
       setLoading(false);
     }
@@ -256,28 +314,25 @@ export function PostsContent({
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString("en-US", {
+      year: "numeric",
       month: "short",
       day: "numeric",
-      year: "numeric",
     });
   };
 
   const getStatusBadge = (status: Post["status"], needsAnalytics?: boolean) => {
-    if (needsAnalytics) {
+    const colors = statusColors[status];
+    const className = `text-xs font-medium px-2 py-1 rounded-full border ${colors}`;
+
+    if (status === "used" && needsAnalytics) {
       return (
-        <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200">
-          Needs Analytics
+        <Badge className="text-xs bg-red-50 text-red-700 border-red-200">
+          📊 Needs Analytics
         </Badge>
       );
     }
 
-    const labels = {
-      draft: "Draft",
-      used: "Posted",
-      archived: "Archived",
-    };
-
-    return <Badge className={statusColors[status]}>{labels[status]}</Badge>;
+    return <Badge className={className}>{status.toUpperCase()}</Badge>;
   };
 
   const handleCopy = (content: string) => {
@@ -287,7 +342,7 @@ export function PostsContent({
 
   const handleMarkAsPosted = async (postId: string) => {
     try {
-      const updatePromise = supabase
+      const { error } = await supabase
         .from("posts")
         .update({
           status: "used",
@@ -295,38 +350,38 @@ export function PostsContent({
         })
         .eq("id", postId);
 
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Update timeout")), 10000)
-      );
-
-      const result = await Promise.race([updatePromise, timeoutPromise]);
-      const { error } = result as { error: any };
-
       if (error) throw error;
 
-      // Update local state
-      setData((prev) => ({
-        ...prev,
-        posts: prev.posts.map((post) =>
+      setData((prevData) => ({
+        ...prevData,
+        posts: prevData.posts.map((post) =>
           post.id === postId
             ? {
                 ...post,
                 status: "used" as const,
                 posted_at: new Date().toISOString(),
+                needsAnalytics: true,
               }
             : post
         ),
+        stats: {
+          ...prevData.stats,
+          draftPosts: prevData.stats.draftPosts - 1,
+          publishedPosts: prevData.stats.publishedPosts + 1,
+          postsNeedingAnalytics: prevData.stats.postsNeedingAnalytics + 1,
+        },
       }));
 
-      toast.success("Post marked as posted");
+      toast.success("Post marked as posted!");
     } catch (error) {
-      console.error("Error updating post:", error);
-      toast.error("Failed to update post");
+      console.error("Error marking post as posted:", error);
+      toast.error("Failed to mark post as posted");
+      handleAuthError(error);
     }
   };
 
   const handleEdit = (post: Post) => {
-    router.push(`/posts/edit/${post.id}`);
+    router.push(`/posts/create?edit=${post.id}`);
   };
 
   const handleDelete = async (postId: string) => {
@@ -337,20 +392,32 @@ export function PostsContent({
 
       if (error) throw error;
 
-      // Update local state
-      setData((prev) => ({
-        ...prev,
-        posts: prev.posts.filter((post) => post.id !== postId),
+      setData((prevData) => ({
+        ...prevData,
+        posts: prevData.posts.filter((post) => post.id !== postId),
         stats: {
-          ...prev.stats,
-          totalPosts: prev.stats.totalPosts - 1,
+          ...prevData.stats,
+          totalPosts: prevData.stats.totalPosts - 1,
+          draftPosts:
+            prevData.posts.find((p) => p.id === postId)?.status === "draft"
+              ? prevData.stats.draftPosts - 1
+              : prevData.stats.draftPosts,
+          publishedPosts:
+            prevData.posts.find((p) => p.id === postId)?.status === "used"
+              ? prevData.stats.publishedPosts - 1
+              : prevData.stats.publishedPosts,
+          archivedPosts:
+            prevData.posts.find((p) => p.id === postId)?.status === "archived"
+              ? prevData.stats.archivedPosts - 1
+              : prevData.stats.archivedPosts,
         },
       }));
 
-      toast.success("Post deleted");
+      toast.success("Post deleted successfully");
     } catch (error) {
       console.error("Error deleting post:", error);
       toast.error("Failed to delete post");
+      handleAuthError(error);
     }
   };
 
@@ -358,32 +425,32 @@ export function PostsContent({
     if (!selectedPost) return;
 
     try {
-      // Convert post_id to integer to match database schema
-      const postId = parseInt(selectedPost.id, 10);
+      const engagementRate =
+        analyticsData.impressions > 0
+          ? ((analyticsData.likes +
+              analyticsData.comments +
+              analyticsData.shares) /
+              analyticsData.impressions) *
+            100
+          : 0;
 
-      const { error } = await supabase.from("post_performance").upsert(
-        {
-          post_id: postId,
-          impressions: analyticsData.impressions,
-          likes: analyticsData.likes,
-          comments: analyticsData.comments,
-          shares: analyticsData.shares,
-          clicks: 0, // Default clicks to 0
-          performance_notes: analyticsData.notes || null, // Map to correct field name
-          recorded_at: new Date().toISOString(),
-        },
-        {
-          onConflict: "post_id", // Handle duplicates by post_id
-          ignoreDuplicates: false, // Update if exists
-        }
-      );
+      const { error } = await supabase.from("post_analytics").upsert({
+        post_id: selectedPost.id,
+        user_id: userId,
+        impressions: analyticsData.impressions,
+        likes: analyticsData.likes,
+        comments: analyticsData.comments,
+        shares: analyticsData.shares,
+        engagement_rate: engagementRate,
+        notes: analyticsData.notes || null,
+        recorded_at: new Date().toISOString(),
+      });
 
       if (error) throw error;
 
-      // Update local state
-      setData((prev) => ({
-        ...prev,
-        posts: prev.posts.map((post) =>
+      setData((prevData) => ({
+        ...prevData,
+        posts: prevData.posts.map((post) =>
           post.id === selectedPost.id
             ? {
                 ...post,
@@ -394,21 +461,20 @@ export function PostsContent({
                   likes: analyticsData.likes,
                   comments: analyticsData.comments,
                   shares: analyticsData.shares,
-                  engagement_rate:
-                    analyticsData.impressions > 0
-                      ? ((analyticsData.likes +
-                          analyticsData.comments +
-                          analyticsData.shares) /
-                          analyticsData.impressions) *
-                        100
-                      : 0,
+                  engagement_rate: engagementRate,
                 },
               }
             : post
         ),
+        stats: {
+          ...prevData.stats,
+          postsNeedingAnalytics: Math.max(
+            0,
+            prevData.stats.postsNeedingAnalytics - 1
+          ),
+        },
       }));
 
-      setAnalyticsDialogOpen(false);
       setAnalyticsData({
         impressions: 0,
         likes: 0,
@@ -416,61 +482,74 @@ export function PostsContent({
         shares: 0,
         notes: "",
       });
-      toast.success("Analytics saved successfully");
+      setAnalyticsDialogOpen(false);
+      setSelectedPost(null);
+      toast.success("Analytics saved successfully!");
     } catch (error) {
       console.error("Error saving analytics:", error);
       toast.error("Failed to save analytics");
+      handleAuthError(error);
     }
   };
 
   const openAnalyticsDialog = (post: Post) => {
     setSelectedPost(post);
     setAnalyticsData({
-      impressions: post.analyticsData?.impressions || 0,
-      likes: post.analyticsData?.likes || 0,
-      comments: post.analyticsData?.comments || 0,
-      shares: post.analyticsData?.shares || 0,
+      impressions: 0,
+      likes: 0,
+      comments: 0,
+      shares: 0,
       notes: "",
     });
     setAnalyticsDialogOpen(true);
   };
 
   const handleSaveDate = async () => {
-    if (!selectedPost || !selectedDate) return;
+    if (!selectedPost) return;
 
     try {
       const { error } = await supabase
         .from("posts")
-        .update({ posted_at: selectedDate })
+        .update({
+          scheduled_date: selectedDate || null,
+          updated_at: new Date().toISOString(),
+        })
         .eq("id", selectedPost.id);
 
       if (error) throw error;
 
-      // Update local state
-      setData((prev) => ({
-        ...prev,
-        posts: prev.posts.map((post) =>
+      setData((prevData) => ({
+        ...prevData,
+        posts: prevData.posts.map((post) =>
           post.id === selectedPost.id
-            ? { ...post, posted_at: selectedDate }
+            ? {
+                ...post,
+                scheduled_date: selectedDate || null,
+                updated_at: new Date().toISOString(),
+              }
             : post
         ),
       }));
 
       setDateEditDialogOpen(false);
+      setSelectedPost(null);
       setSelectedDate("");
-      toast.success("Date updated successfully");
+
+      const message = selectedDate
+        ? `Post scheduled for ${formatDate(selectedDate)}`
+        : "Schedule removed from post";
+      toast.success(message);
     } catch (error) {
-      console.error("Error updating date:", error);
-      toast.error("Failed to update date");
+      console.error("Error updating schedule:", error);
+      toast.error("Failed to update schedule");
+      handleAuthError(error);
     }
   };
 
   const handlePostClick = (post: Post) => {
-    // If post is already used/posted, just show content instead of editing
     if (post.status === "used") {
       return;
     }
-    // For drafts, allow editing
     handleEdit(post);
   };
 
@@ -479,92 +558,115 @@ export function PostsContent({
       key={post.id}
       className={`hover:shadow-lg transition-all duration-500 ${
         post.status === "used" ? "cursor-default" : "cursor-pointer"
-      } group h-full ${
+      } group h-full p-6 ${
         post.needsAnalytics ? "ring-2 ring-red-200 border-red-200" : ""
-      } ${post.hasAnalytics ? "ring-1 ring-green-200 border-green-200" : ""}`}
+      } ${post.hasAnalytics ? "ring-1 ring-green-200 border-green-200" : ""} ${
+        highlightedPostId === post.id
+          ? "ring-2 ring-blue-400 border-blue-400 bg-blue-50"
+          : ""
+      }`}
       onClick={() => handlePostClick(post)}
     >
-      <CardContent className="p-4 h-full flex flex-col">
-        {/* Header */}
-        <div className="flex items-start justify-between mb-3">
-          <div className="flex items-center gap-2 flex-wrap">
-            {getStatusBadge(post.status, post.needsAnalytics)}
-            <Badge variant="outline" className="text-xs">
-              {post.content_type || "Post"}
-            </Badge>
-            {post.hasAnalytics && (
-              <Badge
-                variant="outline"
-                className="text-xs bg-green-50 text-green-700 border-green-300"
-              >
-                📊 Analytics
-              </Badge>
-            )}
-          </div>
+      {highlightedPostId === post.id && (
+        <div className="mb-2">
+          <Badge className="bg-blue-100 text-blue-700 border-blue-200 text-xs">
+            {searchParams.draft ? "✨ Just Created" : "✨ Just Updated"}
+          </Badge>
+        </div>
+      )}
 
-          {post.status === "used" && post.hasAnalytics && (
-            <BarChart3 className="h-4 w-4 text-green-600" />
+      <div className="flex items-start justify-between mb-3">
+        <div className="flex items-center gap-2 flex-wrap">
+          {getStatusBadge(post.status, post.needsAnalytics)}
+          <Badge variant="outline" className="text-xs">
+            {post.content_type || "Post"}
+          </Badge>
+          {post.hasAnalytics && (
+            <Badge
+              variant="outline"
+              className="text-xs bg-green-50 text-green-700 border-green-300"
+            >
+              📊 Analytics
+            </Badge>
           )}
         </div>
 
-        {/* Title */}
-        <h3 className="font-semibold text-gray-900 mb-2 line-clamp-2">
-          {post.title || post.content.substring(0, 100) + "..."}
-        </h3>
+        {post.status === "used" && post.hasAnalytics && (
+          <BarChart3 className="h-4 w-4 text-green-600" />
+        )}
+      </div>
 
-        {/* Content Preview */}
-        <p className="text-sm text-gray-600 line-clamp-3 mb-3 flex-grow">
-          {post.content}
-        </p>
+      <h3 className="font-semibold text-gray-900 mb-2 line-clamp-2">
+        {post.title || post.content.substring(0, 100) + "..."}
+      </h3>
 
-        {/* Analytics Preview */}
-        {post.hasAnalytics && post.analyticsData && (
-          <div className="mb-3 p-2 bg-green-50 rounded-lg border border-green-200">
-            <div className="grid grid-cols-4 gap-2 text-xs">
-              <div className="text-center">
-                <div className="font-medium text-green-700">
-                  {post.analyticsData.impressions.toLocaleString()}
-                </div>
-                <div className="text-green-600">Views</div>
+      <PostContentPreview content={post.content} />
+
+      {post.hasAnalytics && post.analyticsData && (
+        <div className="mb-3 p-2 bg-green-50 rounded-lg border border-green-200">
+          <div className="grid grid-cols-4 gap-2 text-xs">
+            <div className="text-center">
+              <div className="font-medium text-green-700">
+                {post.analyticsData.impressions.toLocaleString()}
               </div>
-              <div className="text-center">
-                <div className="font-medium text-green-700">
-                  {post.analyticsData.likes}
-                </div>
-                <div className="text-green-600">Likes</div>
+              <div className="text-green-600">Views</div>
+            </div>
+            <div className="text-center">
+              <div className="font-medium text-green-700">
+                {post.analyticsData.likes}
               </div>
-              <div className="text-center">
-                <div className="font-medium text-green-700">
-                  {post.analyticsData.comments}
-                </div>
-                <div className="text-green-600">Comments</div>
+              <div className="text-green-600">Likes</div>
+            </div>
+            <div className="text-center">
+              <div className="font-medium text-green-700">
+                {post.analyticsData.comments}
               </div>
-              <div className="text-center">
-                <div className="font-medium text-green-700">
-                  {post.analyticsData.engagement_rate.toFixed(1)}%
-                </div>
-                <div className="text-green-600">Engagement</div>
+              <div className="text-green-600">Comments</div>
+            </div>
+            <div className="text-center">
+              <div className="font-medium text-green-700">
+                {post.analyticsData.engagement_rate.toFixed(1)}%
               </div>
+              <div className="text-green-600">Engagement</div>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Actions */}
-        <div className="flex items-center justify-between pt-3 border-t border-gray-100">
-          <div className="text-xs text-gray-500">
-            {post.status === "used" && post.posted_at ? (
-              <span>Posted {formatDate(post.posted_at)}</span>
-            ) : post.scheduled_date ? (
-              <span className="text-blue-600">
-                📅 Scheduled {formatDate(post.scheduled_date)}
-              </span>
-            ) : (
-              <span>Created {formatDate(post.created_at)}</span>
-            )}
-          </div>
+      <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+        <div className="text-xs text-gray-500">
+          {post.status === "used" && post.posted_at ? (
+            <span>Posted {formatDate(post.posted_at)}</span>
+          ) : post.scheduled_date ? (
+            <span className="text-blue-600">
+              📅 Scheduled {formatDate(post.scheduled_date)}
+            </span>
+          ) : (
+            <span>Created {formatDate(post.created_at)}</span>
+          )}
+        </div>
 
-          <div className="flex items-center gap-2">
-            {/* Copy Button */}
+        <div className="flex items-center gap-2">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleCopy(post.content);
+                }}
+                className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 p-0"
+              >
+                <Copy className="h-3 w-3" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Copy content to clipboard</p>
+            </TooltipContent>
+          </Tooltip>
+
+          {post.status === "draft" ? (
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
@@ -572,195 +674,171 @@ export function PostsContent({
                   size="sm"
                   onClick={(e) => {
                     e.stopPropagation();
-                    handleCopy(post.content);
+                    handleMarkAsPosted(post.id);
                   }}
                   className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 p-0"
                 >
-                  <Copy className="h-3 w-3" />
+                  <CheckCircle className="h-3 w-3" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                <p>Copy content to clipboard</p>
+                <p>Mark as posted</p>
               </TooltipContent>
             </Tooltip>
-
-            {/* Mark as Posted / Analytics Button */}
-            {post.status === "draft" ? (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleMarkAsPosted(post.id);
-                    }}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 p-0"
-                  >
-                    <CheckCircle className="h-3 w-3" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Mark as posted</p>
-                </TooltipContent>
-              </Tooltip>
-            ) : post.status === "used" && !post.hasAnalytics ? (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openAnalyticsDialog(post);
-                    }}
-                    className={`opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 p-0 ${
-                      post.needsAnalytics
-                        ? "border-red-300 bg-red-50 hover:bg-red-100"
-                        : ""
-                    }`}
-                  >
-                    <BarChart3
-                      className={`h-3 w-3 ${
-                        post.needsAnalytics ? "text-red-600" : ""
-                      }`}
-                    />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Add analytics</p>
-                </TooltipContent>
-              </Tooltip>
-            ) : post.status === "used" && post.hasAnalytics ? (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      // Could open analytics view dialog here
-                    }}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 p-0"
-                  >
-                    <BarChart3 className="h-3 w-3 text-green-600" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>View analytics</p>
-                </TooltipContent>
-              </Tooltip>
-            ) : null}
-
-            {/* More Actions Menu */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
+          ) : post.status === "used" && !post.hasAnalytics ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openAnalyticsDialog(post);
+                  }}
+                  className={`opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 p-0 ${
+                    post.needsAnalytics
+                      ? "border-red-300 bg-red-50 hover:bg-red-100"
+                      : ""
+                  }`}
+                >
+                  <BarChart3
+                    className={`h-3 w-3 ${
+                      post.needsAnalytics ? "text-red-600" : ""
+                    }`}
+                  />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Add analytics</p>
+              </TooltipContent>
+            </Tooltip>
+          ) : post.status === "used" && post.hasAnalytics ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                  }}
                   className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 p-0"
                 >
-                  <StickyNote className="h-3 w-3" />
+                  <BarChart3 className="h-3 w-3 text-green-600" />
                 </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => handleEdit(post)}>
-                  <Edit className="h-4 w-4 mr-2" />
-                  Edit Post
-                </DropdownMenuItem>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>View analytics</p>
+              </TooltipContent>
+            </Tooltip>
+          ) : null}
 
-                {post.scheduled_date ? (
-                  <DropdownMenuItem
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSelectedPost(post);
-                      setSelectedDate(post.scheduled_date || "");
-                      setDateEditDialogOpen(true);
-                    }}
-                  >
-                    <Calendar className="h-4 w-4 mr-2" />
-                    Edit Schedule
-                  </DropdownMenuItem>
-                ) : (
-                  <DropdownMenuItem
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSelectedPost(post);
-                      setSelectedDate("");
-                      setDateEditDialogOpen(true);
-                    }}
-                  >
-                    <Calendar className="h-4 w-4 mr-2" />
-                    Schedule Post
-                  </DropdownMenuItem>
-                )}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={(e) => e.stopPropagation()}
+                className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 p-0"
+              >
+                <MoreHorizontal className="h-3 w-3" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => handleEdit(post)}>
+                <Edit className="h-4 w-4 mr-2" />
+                Edit Post
+              </DropdownMenuItem>
 
-                {post.status === "draft" && (
-                  <DropdownMenuItem
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleMarkAsPosted(post.id);
-                    }}
-                  >
-                    <CheckCircle className="h-4 w-4 mr-2" />
-                    Mark as Posted
-                  </DropdownMenuItem>
-                )}
-
-                {post.status === "used" && !post.hasAnalytics && (
-                  <DropdownMenuItem
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openAnalyticsDialog(post);
-                    }}
-                  >
-                    <BarChart3 className="h-4 w-4 mr-2" />
-                    Add Analytics
-                  </DropdownMenuItem>
-                )}
-
-                <DropdownMenuSeparator />
-
+              {post.scheduled_date ? (
                 <DropdownMenuItem
                   onClick={(e) => {
                     e.stopPropagation();
-                    handleCopy(post.content);
+                    setSelectedPost(post);
+                    setSelectedDate(post.scheduled_date?.split("T")[0] || "");
+                    setDateEditDialogOpen(true);
                   }}
                 >
-                  <Copy className="h-4 w-4 mr-2" />
-                  Copy Content
+                  <Calendar className="h-4 w-4 mr-2" />
+                  Edit Schedule
                 </DropdownMenuItem>
-
-                {post.linkedin_url && (
-                  <DropdownMenuItem
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      window.open(post.linkedin_url || "", "_blank");
-                    }}
-                  >
-                    <ExternalLink className="h-4 w-4 mr-2" />
-                    View on LinkedIn
-                  </DropdownMenuItem>
-                )}
-
-                <DropdownMenuSeparator />
-
+              ) : (
                 <DropdownMenuItem
                   onClick={(e) => {
                     e.stopPropagation();
-                    handleDelete(post.id);
+                    setSelectedPost(post);
+                    setSelectedDate("");
+                    setDateEditDialogOpen(true);
                   }}
-                  className="text-red-600 focus:text-red-600"
                 >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Delete Post
+                  <Calendar className="h-4 w-4 mr-2" />
+                  Schedule Post
                 </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
+              )}
+
+              {post.status === "draft" && (
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleMarkAsPosted(post.id);
+                  }}
+                >
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  Mark as Posted
+                </DropdownMenuItem>
+              )}
+
+              {post.status === "used" && !post.hasAnalytics && (
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openAnalyticsDialog(post);
+                  }}
+                >
+                  <BarChart3 className="h-4 w-4 mr-2" />
+                  Add Analytics
+                </DropdownMenuItem>
+              )}
+
+              <DropdownMenuSeparator />
+
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleCopy(post.content);
+                }}
+              >
+                <Copy className="h-4 w-4 mr-2" />
+                Copy Content
+              </DropdownMenuItem>
+
+              {post.linkedin_url && (
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    window.open(post.linkedin_url || "", "_blank");
+                  }}
+                >
+                  <ExternalLink className="h-4 w-4 mr-2" />
+                  View on LinkedIn
+                </DropdownMenuItem>
+              )}
+
+              <DropdownMenuSeparator />
+
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDelete(post.id);
+                }}
+                className="text-red-600 focus:text-red-600"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete Post
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
-      </CardContent>
+      </div>
     </Card>
   );
 
@@ -800,7 +878,6 @@ export function PostsContent({
         </div>
       </div>
 
-      {/* Stats Overview */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
         <Card>
           <CardContent className="p-4 text-center">
@@ -844,7 +921,6 @@ export function PostsContent({
         </Card>
       </div>
 
-      {/* Enhanced Filters and Search */}
       <div className="flex flex-col sm:flex-row gap-4 mb-6">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
@@ -887,7 +963,6 @@ export function PostsContent({
         </div>
       </div>
 
-      {/* Analytics Alert */}
       {data.stats.postsNeedingAnalytics > 0 && (
         <Alert className="mb-6 border-red-200 bg-red-50">
           <TrendingUp className="h-4 w-4 text-red-600" />
@@ -903,7 +978,6 @@ export function PostsContent({
         </Alert>
       )}
 
-      {/* Posts Grid */}
       {sortedPosts.length === 0 ? (
         <div className="text-center py-12">
           <PenTool className="h-12 w-12 mx-auto text-gray-400 mb-4" />
@@ -926,7 +1000,6 @@ export function PostsContent({
         </TooltipProvider>
       )}
 
-      {/* Analytics Dialog */}
       <Dialog open={analyticsDialogOpen} onOpenChange={setAnalyticsDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -1016,21 +1089,26 @@ export function PostsContent({
         </DialogContent>
       </Dialog>
 
-      {/* Date Edit Dialog */}
       <Dialog open={dateEditDialogOpen} onOpenChange={setDateEditDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Edit Post Date</DialogTitle>
+            <DialogTitle>
+              {selectedPost?.scheduled_date ? "Edit Schedule" : "Schedule Post"}
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label htmlFor="post-date">Posted Date</Label>
+              <Label htmlFor="schedule-date">Scheduled Date</Label>
               <Input
-                id="post-date"
-                type="datetime-local"
+                id="schedule-date"
+                type="date"
                 value={selectedDate}
                 onChange={(e) => setSelectedDate(e.target.value)}
+                placeholder="Select a date to schedule this post"
               />
+              <p className="text-xs text-gray-500 mt-1">
+                Leave empty to remove the schedule
+              </p>
             </div>
             <div className="flex justify-end space-x-2">
               <Button
@@ -1039,7 +1117,9 @@ export function PostsContent({
               >
                 Cancel
               </Button>
-              <Button onClick={handleSaveDate}>Save Date</Button>
+              <Button onClick={handleSaveDate}>
+                {selectedDate ? "Save Schedule" : "Remove Schedule"}
+              </Button>
             </div>
           </div>
         </DialogContent>

@@ -874,7 +874,7 @@ export function AnalyticsDashboard({
               </div>
 
               {/* AI Learning Progress */}
-              <div className="p-4 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg border border-indigo-200">
+              {/* <div className="p-4 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg border border-indigo-200">
                 <div className="flex items-center gap-2 mb-3">
                   <Brain className="h-5 w-5 text-indigo-600" />
                   <h3 className="font-semibold text-indigo-900">
@@ -921,7 +921,7 @@ export function AnalyticsDashboard({
                   audience behavior to provide personalized recommendations. The
                   more you post and engage, the smarter these insights become!
                 </div>
-              </div>
+              </div> */}
             </div>
           ) : (
             <div className="text-center py-12">

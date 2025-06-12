@@ -204,7 +204,7 @@ export function PromptLibrary({
   const renderPromptCard = (prompt: (typeof displayPrompts)[0]) => (
     <Card
       key={prompt.id}
-      className={`hover:shadow-md transition-shadow cursor-pointer ${
+      className={`hover:shadow-md transition-shadow cursor-pointer h-full flex flex-col ${
         prompt.isUsed ? "opacity-60" : ""
       }`}
       onClick={() => {
@@ -212,29 +212,29 @@ export function PromptLibrary({
         window.location.href = `/posts/create?prompt=${prompt.id}`;
       }}
     >
-      <CardContent className="p-4">
-        <div className="space-y-3">
+      <CardContent className="p-5 flex-1 flex flex-col">
+        <div className="space-y-4 flex-1">
           {/* Category Badge and Status */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex items-center space-x-2 flex-wrap">
               <span
-                className={`px-2 py-1 rounded-full text-xs font-medium border ${
+                className={`px-3 py-1 rounded-full text-xs font-medium border ${
                   categoryColors[prompt.category]
                 }`}
               >
                 {prompt.category}
               </span>
               {prompt.isUsed && (
-                <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600 border border-gray-200">
+                <span className="px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600 border border-gray-200">
                   Used
                 </span>
               )}
             </div>
-            <div className="flex items-center space-x-1">
+            <div className="flex items-center space-x-2 flex-shrink-0">
               <Button
                 size="sm"
                 variant="outline"
-                className="flex items-center space-x-1 text-xs h-7"
+                className="flex items-center space-x-1 text-xs h-8 px-3"
                 onClick={(e) => {
                   e.stopPropagation();
                   setEditingPrompt(prompt);
@@ -243,12 +243,12 @@ export function PromptLibrary({
                 }}
               >
                 <Edit className="h-3 w-3" />
-                <span>Edit Date</span>
+                <span className="hidden sm:inline">Edit Date</span>
               </Button>
               <Button
                 size="sm"
                 variant="outline"
-                className="flex items-center space-x-1 text-xs h-7"
+                className="flex items-center space-x-1 text-xs h-8 px-3"
                 onClick={(e) => {
                   e.stopPropagation();
                   window.location.href = `/posts/create?prompt=${prompt.id}`;
@@ -256,58 +256,68 @@ export function PromptLibrary({
                 disabled={prompt.isUsed}
               >
                 <Calendar className="h-3 w-3" />
-                <span>{prompt.scheduledDate ? "Scheduled" : "Schedule"}</span>
+                <span className="hidden sm:inline">
+                  {prompt.scheduledDate ? "Scheduled" : "Schedule"}
+                </span>
               </Button>
             </div>
           </div>
 
           {/* Title */}
-          <h3 className="font-semibold text-gray-900 leading-tight text-sm">
-            {prompt.title}
-          </h3>
+          <div className="min-h-0">
+            <h3 className="font-semibold text-gray-900 leading-tight text-sm break-words">
+              {prompt.title}
+            </h3>
+          </div>
 
           {/* Hook */}
-          <p className="text-gray-600 text-xs leading-relaxed">
-            Hook: {prompt.hook}
-          </p>
+          <div className="min-h-0">
+            <p className="text-gray-600 text-xs leading-relaxed break-words">
+              <span className="font-medium">Hook:</span> {prompt.hook}
+            </p>
+          </div>
 
           {/* Theme and Scheduled Date */}
-          <div className="space-y-2">
-            <div className="text-xs text-gray-500">{prompt.theme}</div>
+          <div className="space-y-3 flex-1">
+            <div className="text-xs text-gray-500 break-words min-h-0">
+              {prompt.theme}
+            </div>
+
             {prompt.scheduledDate && (
               <div className="text-xs text-blue-600 font-medium">
                 Scheduled: {new Date(prompt.scheduledDate).toLocaleDateString()}
               </div>
             )}
+
             <div className="flex flex-wrap gap-1">
               {prompt.tags.map((tag, index) => (
                 <span
                   key={index}
-                  className="px-2 py-0.5 bg-gray-100 text-gray-700 rounded text-xs"
+                  className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs"
                 >
                   {tag}
                 </span>
               ))}
             </div>
+          </div>
 
-            {/* Feedback Section */}
-            <div
-              className="flex items-center justify-between pt-2 border-t border-gray-100"
-              onClick={(e) => e.stopPropagation()} // Prevent card click
+          {/* Feedback Section */}
+          <div
+            className="flex items-center justify-between pt-3 border-t border-gray-100 mt-auto"
+            onClick={(e) => e.stopPropagation()} // Prevent card click
+          >
+            <QuickRating type="prompt" targetId={parseInt(prompt.id)} />
+            <FeedbackButton
+              type="prompt"
+              targetId={parseInt(prompt.id)}
+              title={prompt.title}
+              content={prompt.hook}
+              variant="ghost"
+              size="sm"
+              className="text-xs h-7 px-3"
             >
-              <QuickRating type="prompt" targetId={parseInt(prompt.id)} />
-              <FeedbackButton
-                type="prompt"
-                targetId={parseInt(prompt.id)}
-                title={prompt.title}
-                content={prompt.hook}
-                variant="ghost"
-                size="sm"
-                className="text-xs h-6 px-2"
-              >
-                Feedback
-              </FeedbackButton>
-            </div>
+              Feedback
+            </FeedbackButton>
           </div>
         </div>
       </CardContent>
@@ -318,7 +328,7 @@ export function PromptLibrary({
     <>
       <div className="w-full space-y-6">
         {/* View Toggle Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
             <h2 className="text-2xl font-bold text-gray-900">Prompt Library</h2>
             <p className="text-gray-600 mt-1">
@@ -355,7 +365,7 @@ export function PromptLibrary({
         </div>
 
         {/* Search and Filters */}
-        <div className="flex items-center space-x-4">
+        <div className="flex flex-col lg:flex-row lg:items-center gap-4">
           <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
             <Input
@@ -366,62 +376,64 @@ export function PromptLibrary({
             />
           </div>
 
-          <Select value={selectedType} onValueChange={setSelectedType}>
-            <SelectTrigger className="w-[140px]">
-              <SelectValue placeholder="All Types" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Types</SelectItem>
-              <SelectItem value="educational">Educational</SelectItem>
-              <SelectItem value="story">Story</SelectItem>
-              <SelectItem value="question">Question</SelectItem>
-              <SelectItem value="promotional">Promotional</SelectItem>
-              <SelectItem value="personal">Personal</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="flex flex-wrap items-center gap-3">
+            <Select value={selectedType} onValueChange={setSelectedType}>
+              <SelectTrigger className="w-[140px]">
+                <SelectValue placeholder="All Types" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Types</SelectItem>
+                <SelectItem value="educational">Educational</SelectItem>
+                <SelectItem value="story">Story</SelectItem>
+                <SelectItem value="question">Question</SelectItem>
+                <SelectItem value="promotional">Promotional</SelectItem>
+                <SelectItem value="personal">Personal</SelectItem>
+              </SelectContent>
+            </Select>
 
-          <Select value={selectedTheme} onValueChange={setSelectedTheme}>
-            <SelectTrigger className="w-[140px]">
-              <SelectValue placeholder="All Themes" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Themes</SelectItem>
-              {uniqueThemes.map((theme) => (
-                <SelectItem key={theme} value={theme}>
-                  {theme.length > 30 ? theme.substring(0, 30) + "..." : theme}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            <Select value={selectedTheme} onValueChange={setSelectedTheme}>
+              <SelectTrigger className="w-[140px]">
+                <SelectValue placeholder="All Themes" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Themes</SelectItem>
+                {uniqueThemes.map((theme) => (
+                  <SelectItem key={theme} value={theme}>
+                    {theme.length > 30 ? theme.substring(0, 30) + "..." : theme}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-          <div className="flex items-center space-x-2 bg-gray-100 rounded-lg p-1">
-            <Button
-              variant={!showUsedPrompts ? "default" : "ghost"}
-              size="sm"
-              onClick={() => setShowUsedPrompts(false)}
-              className="flex items-center space-x-1 text-xs"
-            >
-              <span>Available</span>
-              <span className="text-xs opacity-75">
-                ({displayPrompts.filter((p) => !p.isUsed).length})
-              </span>
-            </Button>
-            <Button
-              variant={showUsedPrompts ? "default" : "ghost"}
-              size="sm"
-              onClick={() => setShowUsedPrompts(true)}
-              className="flex items-center space-x-1 text-xs"
-            >
-              <span>Used</span>
-              <span className="text-xs opacity-75">
-                ({displayPrompts.filter((p) => p.isUsed).length})
-              </span>
-            </Button>
+            <div className="flex items-center space-x-2 bg-gray-100 rounded-lg p-1">
+              <Button
+                variant={!showUsedPrompts ? "default" : "ghost"}
+                size="sm"
+                onClick={() => setShowUsedPrompts(false)}
+                className="flex items-center space-x-2 text-xs px-3"
+              >
+                <span>Available</span>
+                <span className="text-xs opacity-75">
+                  ({displayPrompts.filter((p) => !p.isUsed).length})
+                </span>
+              </Button>
+              <Button
+                variant={showUsedPrompts ? "default" : "ghost"}
+                size="sm"
+                onClick={() => setShowUsedPrompts(true)}
+                className="flex items-center space-x-2 text-xs px-3"
+              >
+                <span>Used</span>
+                <span className="text-xs opacity-75">
+                  ({displayPrompts.filter((p) => p.isUsed).length})
+                </span>
+              </Button>
+            </div>
           </div>
         </div>
 
         {/* Prompts Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           {filteredPrompts.map(renderPromptCard)}
         </div>
 

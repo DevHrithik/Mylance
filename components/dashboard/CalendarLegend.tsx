@@ -6,7 +6,7 @@ import { DashboardStats } from "@/hooks/useDashboardData";
 interface CalendarLegendItem {
   label: string;
   count: number;
-  type: "completed" | "available" | "none";
+  type: "completed" | "available";
 }
 
 interface CalendarLegendProps {
@@ -25,11 +25,6 @@ export function CalendarLegend({ stats, className }: CalendarLegendProps) {
       label: "Available Prompts",
       count: stats.availablePrompts,
       type: "available",
-    },
-    {
-      label: "No Activity",
-      count: Math.max(0, 30 - stats.completedPosts - stats.availablePrompts), // Rough estimate for display
-      type: "none",
     },
   ];
 
@@ -50,11 +45,6 @@ export function CalendarLegend({ stats, className }: CalendarLegendProps) {
                 )}
                 {item.type === "available" && (
                   <div className="h-6 w-6 rounded-full border-2 border-cyan-400 flex items-center justify-center text-gray-900">
-                    {item.count}
-                  </div>
-                )}
-                {item.type === "none" && (
-                  <div className="h-6 w-6 rounded-full flex items-center justify-center text-gray-400">
                     {item.count}
                   </div>
                 )}

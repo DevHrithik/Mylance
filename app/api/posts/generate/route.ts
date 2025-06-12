@@ -341,17 +341,25 @@ export async function POST(request: NextRequest) {
     // Create OpenAI prompt with personalization
     const systemPrompt = `You are a professional LinkedIn content writer. Create engaging, authentic LinkedIn posts that drive engagement and provide value to the audience.
 
+CRITICAL REQUIREMENTS:
+- NEVER use bold formatting (**text**), italics (*text*), or any markdown formatting
+- NEVER truncate content or end with "..." or similar incomplete indicators
+- ALWAYS write complete, finished posts that are ready to copy and paste
+- Write in plain text only - no special formatting or markup
+- The content should be complete and polished in one response
+
 Guidelines:
 - Use a ${body.tone || "professional"} tone
 - Target ${
       body.length
     } length (short: 100-200 words, medium: 200-400 words, long: 400+ words)
-- Include emojis and formatting for readability
-- Use line breaks effectively
+- Include emojis for readability but NO bold/italic formatting
+- Use line breaks effectively for visual structure
 - Don't include hashtags in the content (they'll be added separately)
 - Make it authentic and personal when appropriate
 - Include actionable insights or takeaways
 - End with an engaging question to drive comments
+- Write complete sentences and complete thoughts - never truncate
 
 Here are examples of different post types to follow:
 
@@ -419,7 +427,7 @@ Use these formats as inspiration while adapting the structure and style to match
       userPreferences ? buildVoiceInstructions(userPreferences) : ""
     }`;
 
-    const userPrompt = `Create a LinkedIn post with the following details:
+    const userPrompt = `Create a COMPLETE LinkedIn post with the following details:
 
 Title/Topic: ${body.title}
 Opening Hook: ${body.hook}
@@ -430,7 +438,14 @@ Length: ${body.length}
 
 ${promptData ? `Original Prompt Context: ${promptData.prompt_text}` : ""}
 
-IMPORTANT: Based on the category "${
+CRITICAL INSTRUCTIONS:
+- Write a COMPLETE, FINISHED post that is ready to copy and paste
+- NO formatting like **bold** or *italics* - plain text only
+- NO truncation or "..." endings - finish every thought completely
+- Start with the provided hook and expand naturally from there
+- Make it engaging, valuable, authentic, and end with a compelling question
+
+Based on the category "${
       body.category
     }", use the appropriate example format above as inspiration:
 - For "story" or "personal" categories: Use the First-Person Anecdote format
@@ -438,7 +453,7 @@ IMPORTANT: Based on the category "${
 - For "question" categories: Use the Engagement Question format
 - For business/industry content: Use the Case Study or Thought Leadership format
 
-The post should start with the provided hook and expand naturally from there. Make it engaging, valuable, authentic, and end with a compelling question to drive engagement. Use emojis and bullet points where appropriate for better readability.`;
+Write the ENTIRE post now - complete and ready to use.`;
 
     // Call OpenAI API
     const response = await fetch("https://api.openai.com/v1/chat/completions", {

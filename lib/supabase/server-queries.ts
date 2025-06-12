@@ -54,6 +54,7 @@ export const getDashboardData = unstable_cache(
   async (userId: string): Promise<DashboardData> => {
     const supabase = createServiceClient();
 
+    try {
     // Use our optimized database function
     const { data, error } = await supabase.rpc("get_dashboard_stats", {
       p_user_id: userId,
@@ -61,7 +62,10 @@ export const getDashboardData = unstable_cache(
 
     if (error) {
       console.error("Dashboard data fetch error:", error);
-      throw new Error(`Failed to fetch dashboard data: ${error.message}`);
+
+        // If the database function fails, fallback to manual queries
+        console.log("Falling back to manual queries...");
+        return await getFallbackDashboardData(userId);
     }
 
     if (!data || data.length === 0) {
@@ -96,6 +100,11 @@ export const getDashboardData = unstable_cache(
       upcomingPrompts: result.upcoming_prompts || [],
       userPreferences: result.user_preferences || {},
     };
+    } catch (err: any) {
+      console.error("Dashboard data fetch failed:", err);
+      // Fallback to manual queries if database function fails
+      return await getFallbackDashboardData(userId);
+    }
   },
   ["dashboard-data"],
   {
@@ -103,6 +112,84 @@ export const getDashboardData = unstable_cache(
     tags: ["dashboard"],
   }
 );
+
+// Fallback function for dashboard data when the database function fails
+async function getFallbackDashboardData(
+  userId: string
+): Promise<DashboardData> {
+  const supabase = createServiceClient();
+
+  try {
+    console.log("Using fallback dashboard data queries...");
+
+    // Get basic stats with manual queries
+    const [postsQuery, promptsQuery, preferencesQuery] = await Promise.all([
+      supabase
+        .from("posts")
+        .select(
+          "id, title, content, status, content_type, created_at, posted_at"
+        )
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(5),
+
+      supabase
+        .from("content_prompts")
+        .select(
+          "id, category, hook, prompt_text, scheduled_date, pillar_number"
+        )
+        .eq("user_id", userId)
+        .eq("is_used", false)
+        .order("scheduled_date", { ascending: true })
+        .limit(5),
+
+      supabase
+        .from("user_preferences")
+        .select("*")
+        .eq("user_id", userId)
+        .limit(1)
+        .maybeSingle(),
+    ]);
+
+    const posts = postsQuery.data || [];
+    const prompts = promptsQuery.data || [];
+    const preferences = preferencesQuery.data || {};
+
+    // Calculate stats manually
+    const completedPosts = posts.filter((p) => p.status === "used").length;
+    const totalPosts = posts.length;
+    const availablePrompts = prompts.length;
+    const completionRate =
+      totalPosts > 0 ? Math.round((completedPosts / totalPosts) * 100) : 0;
+
+    return {
+      stats: {
+        completedPosts,
+        availablePrompts,
+        totalPosts,
+        completionRate,
+      },
+      recentPosts: posts,
+      upcomingPrompts: prompts,
+      userPreferences: preferences || {},
+    };
+  } catch (fallbackError: any) {
+    console.error("Fallback dashboard data failed:", fallbackError);
+
+    // Return empty data as last resort
+    return {
+      stats: {
+        completedPosts: 0,
+        availablePrompts: 0,
+        totalPosts: 0,
+        completionRate: 0,
+      },
+      recentPosts: [],
+      upcomingPrompts: [],
+      userPreferences: {},
+    };
+  }
+}
 
 // Server-side calendar data fetching
 export const getCalendarData = unstable_cache(
