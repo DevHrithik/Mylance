@@ -578,10 +578,21 @@ export function PostsContent({
       const { error, data } = await supabase
         .from("posts")
         .update(updateData)
-        .eq("id", selectedPost.id)
+        .eq("id", parseInt(selectedPost.id)) // Ensure ID is converted to integer
         .select("id, scheduled_date, status");
 
       if (error) throw error;
+
+      // Revalidate the posts cache to ensure fresh data on next refresh
+      try {
+        await fetch(`/api/posts/refresh?userId=${userId}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        });
+      } catch (cacheError) {
+        console.warn("Failed to revalidate cache:", cacheError);
+        // Don't fail the operation if cache revalidation fails
+      }
 
       // Update local state with the exact value from database
       setData((prevData) => ({

@@ -542,7 +542,7 @@ export function PostList() {
           scheduled_date: selectedDate || null,
           updated_at: new Date().toISOString(),
         })
-        .eq("id", selectedPost.id);
+        .eq("id", parseInt(selectedPost.id));
 
       if (error) throw error;
 

@@ -29,12 +29,30 @@ import {
   Zap,
   Palette,
   Volume2,
+  BarChart3,
+  Heart,
+  MessageCircle,
+  Share,
+  Eye,
+  PlusCircle,
+  User,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import { revalidatePreferences } from "@/lib/supabase/server-queries";
 import { CreateWritingProfileModal } from "@/components/common/CreateWritingProfileModal";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
+import { WhatWorksInsights } from "./WhatWorksInsights";
 
 interface UserPreferences {
   id: number;
@@ -105,6 +123,18 @@ export function WritingProfileContent({
   const [showCreateModal, setShowCreateModal] = useState(
     !initialData.hasPreferences
   );
+  const [showAnalyticsDialog, setShowAnalyticsDialog] = useState(false);
+  const [analyticsData, setAnalyticsData] = useState({
+    postContent: "",
+    impressions: "",
+    likes: "",
+    comments: "",
+    shares: "",
+    linkedinUrl: "",
+    postDate: "",
+  });
+  const [whatWorksData, setWhatWorksData] = useState<any>(null);
+  const [whatWorksLoading, setWhatWorksLoading] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const supabase = createClient();
@@ -227,6 +257,242 @@ export function WritingProfileContent({
     );
   };
 
+  const handleAddPostsClick = async () => {
+    if (!newSamplePost.trim()) {
+      // If textarea is empty, just focus it
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+      }
+      return;
+    }
+
+    // If there's content, add the post
+    await addSamplePost();
+  };
+
+  // Add analytics functionality
+  const handleCollectAnalytics = () => {
+    setAnalyticsData({
+      postContent: newSamplePost,
+      impressions: "",
+      likes: "",
+      comments: "",
+      shares: "",
+      linkedinUrl: "",
+      postDate: "",
+    });
+    setShowAnalyticsDialog(true);
+  };
+
+  const resetAnalyticsData = () => {
+    setAnalyticsData({
+      postContent: "",
+      impressions: "",
+      likes: "",
+      comments: "",
+      shares: "",
+      linkedinUrl: "",
+      postDate: "",
+    });
+  };
+
+  const addSamplePostWithAnalytics = async () => {
+    if (!analyticsData.postContent.trim() || !localPreferences) return;
+
+    setAnalyzingPost(true);
+    try {
+      const engagement_rate =
+        analyticsData.impressions && parseInt(analyticsData.impressions) > 0
+          ? ((parseInt(analyticsData.likes || "0") +
+              parseInt(analyticsData.comments || "0") +
+              parseInt(analyticsData.shares || "0")) /
+              parseInt(analyticsData.impressions)) *
+            100
+          : 0;
+
+      console.log("Sending analytics data:", {
+        postContent: analyticsData.postContent.substring(0, 100) + "...",
+        impressions: analyticsData.impressions,
+        likes: analyticsData.likes,
+        comments: analyticsData.comments,
+        shares: analyticsData.shares,
+        linkedinUrl: analyticsData.linkedinUrl,
+        postDate: analyticsData.postDate,
+      });
+
+      let analyticsResult = null;
+      let analyticsError = null;
+
+      // Try to save to analytics table via API (but don't fail if it doesn't work)
+      try {
+        const analyticsResponse = await fetch("/api/sample-posts/analytics", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            postContent: analyticsData.postContent,
+            impressions: analyticsData.impressions,
+            likes: analyticsData.likes,
+            comments: analyticsData.comments,
+            shares: analyticsData.shares,
+            linkedinUrl: analyticsData.linkedinUrl,
+            postDate: analyticsData.postDate,
+          }),
+        });
+
+        console.log("Analytics response status:", analyticsResponse.status);
+
+        if (analyticsResponse.ok) {
+          const responseText = await analyticsResponse.text();
+          console.log("Analytics response text:", responseText);
+
+          if (responseText) {
+            try {
+              analyticsResult = JSON.parse(responseText);
+              console.log("Analytics saved successfully:", analyticsResult);
+            } catch (parseError) {
+              console.error("Failed to parse analytics response:", parseError);
+              analyticsError = "Invalid response format from analytics API";
+            }
+          } else {
+            analyticsError = "Empty response from analytics API";
+          }
+        } else {
+          const errorText = await analyticsResponse.text();
+          console.error("Analytics API error response:", errorText);
+
+          if (errorText) {
+            try {
+              const errorData = JSON.parse(errorText);
+              analyticsError =
+                errorData.details ||
+                errorData.error ||
+                "Failed to save analytics data";
+            } catch (parseError) {
+              analyticsError =
+                "Analytics API returned error: " + analyticsResponse.status;
+            }
+          } else {
+            analyticsError = "Analytics API returned empty error response";
+          }
+        }
+      } catch (fetchError) {
+        console.error("Analytics API fetch error:", fetchError);
+        analyticsError = "Failed to connect to analytics API";
+      }
+
+      // Create post data (with or without analytics)
+      const postData = {
+        content: analyticsData.postContent.trim(),
+        added_at: new Date().toISOString(),
+        analyzed_at: new Date().toISOString(),
+        word_count: analyticsData.postContent.trim().split(/\s+/).length,
+        character_count: analyticsData.postContent.trim().length,
+        // Analytics data (even if API failed, we can store the basic metrics)
+        analytics: {
+          impressions: parseInt(analyticsData.impressions || "0"),
+          likes: parseInt(analyticsData.likes || "0"),
+          comments: parseInt(analyticsData.comments || "0"),
+          shares: parseInt(analyticsData.shares || "0"),
+          engagement_rate: parseFloat(engagement_rate.toFixed(2)),
+          linkedin_url: analyticsData.linkedinUrl || null,
+          post_date: analyticsData.postDate || null,
+          collected_at: new Date().toISOString(),
+        },
+        performance_insights: {
+          high_performing: engagement_rate > 5,
+          engagement_level:
+            engagement_rate > 10
+              ? "excellent"
+              : engagement_rate > 5
+              ? "good"
+              : engagement_rate > 2
+              ? "average"
+              : "low",
+          what_works:
+            engagement_rate > 5
+              ? [
+                  "Strong engagement metrics",
+                  "Content resonated with audience",
+                  "Good reach and interaction",
+                ]
+              : [],
+          analytics_id: analyticsResult?.data?.id || null,
+          analytics_error: analyticsError, // Store any error for debugging
+        },
+      };
+
+      const currentPosts = localPreferences.sample_posts || [];
+      const updatedPosts = [...currentPosts, postData];
+
+      console.log("Saving to user preferences...");
+
+      // Save to user preferences (this should always work)
+      const { error } = await supabase
+        .from("user_preferences")
+        .update({
+          sample_posts: updatedPosts,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", localPreferences.id);
+
+      if (error) {
+        console.error(
+          "Error saving post with analytics to preferences:",
+          error
+        );
+        toast.error("Failed to save post to preferences: " + error.message);
+        return;
+      }
+
+      // Clear inputs and close dialog
+      setNewSamplePost("");
+      resetAnalyticsData();
+      setShowAnalyticsDialog(false);
+
+      // Clear What Works cache to ensure fresh data
+      const cacheKey = `what-works-insights-${userId}`;
+      localStorage.removeItem(cacheKey);
+      localStorage.removeItem(`${cacheKey}-timestamp`);
+
+      // Fetch fresh data
+      await fetchPreferences();
+
+      // Show success message (with warning if analytics failed)
+      if (analyticsError) {
+        toast.success("Sample post added successfully!", {
+          duration: 5000,
+          description: `Engagement rate: ${engagement_rate.toFixed(
+            2
+          )}% • Note: Analytics data saved locally (API issue: ${analyticsError})`,
+        });
+      } else {
+        toast.success("Sample post with analytics added successfully!", {
+          duration: 3000,
+          description: `Engagement rate: ${engagement_rate.toFixed(2)}% • ${
+            analyticsResult?.data?.insights?.performance_category || "Good"
+          } performance`,
+        });
+      }
+
+      // Analyze writing style and save
+      await analyzeWritingStyle(updatedPosts);
+
+      // Use setTimeout to ensure state updates are processed before saving
+      setTimeout(async () => {
+        await handleSave();
+      }, 100);
+    } catch (error) {
+      console.error("Error adding sample post with analytics:", error);
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error occurred";
+      toast.error("Failed to add sample post with analytics: " + errorMessage);
+    } finally {
+      setAnalyzingPost(false);
+    }
+  };
+
   const addSamplePost = async () => {
     if (!newSamplePost.trim() || !localPreferences) return;
 
@@ -264,20 +530,17 @@ export function WritingProfileContent({
       // Fetch fresh data from database to ensure consistency
       await fetchPreferences();
 
-      console.log(
-        "After saving and fetching, sample_posts:",
-        localPreferences?.sample_posts
-      );
-
       toast.success("Sample post added - analyzing writing style...", {
         duration: 3000,
       });
 
-      // Now analyze the writing style
+      // Now analyze the writing style and save results
       await analyzeWritingStyle(updatedPosts);
 
-      // Save the analysis results
-      await handleSave();
+      // Use setTimeout to ensure state updates are processed before saving
+      setTimeout(async () => {
+        await handleSave();
+      }, 100);
     } catch (error) {
       console.error("Error adding sample post:", error);
       toast.error("Failed to add sample post");
@@ -302,6 +565,7 @@ export function WritingProfileContent({
       if (!response.ok) throw new Error("Analysis failed");
 
       const analysis = await response.json();
+      console.log("Analysis result:", analysis);
 
       // Update the preferences with analyzed data (preserve sample_posts)
       if (localPreferences) {
@@ -311,17 +575,18 @@ export function WritingProfileContent({
                 ...prev,
                 // CRITICAL: Never modify sample_posts here - they're already saved to DB
                 // sample_posts: prev.sample_posts || [], // Don't touch this field
-                // Update fields if they don't exist or analysis provides better data
+
+                // Profile Tab - Auto-fill vocabulary and expressions
                 frequently_used_words:
-                  analysis.frequently_used_words &&
-                  analysis.frequently_used_words.length > 0
-                    ? analysis.frequently_used_words
-                    : prev.frequently_used_words || [],
+                  analysis.frequently_used_words ||
+                  prev.frequently_used_words ||
+                  [],
                 signature_expressions:
-                  analysis.signature_expressions &&
-                  analysis.signature_expressions.length > 0
-                    ? analysis.signature_expressions
-                    : prev.signature_expressions || [],
+                  analysis.signature_expressions ||
+                  prev.signature_expressions ||
+                  [],
+
+                // Style Tab - Auto-fill structural preferences
                 emoji_usage_preference:
                   analysis.emoji_usage ||
                   prev.emoji_usage_preference ||
@@ -330,6 +595,8 @@ export function WritingProfileContent({
                   analysis.sentence_length ||
                   prev.average_sentence_length ||
                   "medium",
+
+                // Tone Tab - Auto-fill all tone characteristics
                 directness_level:
                   analysis.directness_level || prev.directness_level || 5,
                 confidence_level:
@@ -339,6 +606,33 @@ export function WritingProfileContent({
                   analysis.tone || prev.writing_style_tone || "professional",
                 humor_usage:
                   analysis.humor_usage || prev.humor_usage || "minimal",
+
+                // Auto-detect formality level based on tone
+                writing_style_formality:
+                  analysis.tone === "professional"
+                    ? 8
+                    : analysis.tone === "authoritative"
+                    ? 9
+                    : analysis.tone === "educational"
+                    ? 7
+                    : analysis.tone === "conversational"
+                    ? 4
+                    : analysis.tone === "casual"
+                    ? 3
+                    : analysis.tone === "inspirational"
+                    ? 6
+                    : prev.writing_style_formality || 5,
+
+                // Auto-detect question usage based on analysis
+                question_usage:
+                  analysis.tone === "conversational"
+                    ? "frequent"
+                    : analysis.tone === "educational"
+                    ? "moderate"
+                    : analysis.tone === "professional"
+                    ? "minimal"
+                    : prev.question_usage || "moderate",
+
                 personalization_data: {
                   ...prev.personalization_data,
                   last_analysis: new Date().toISOString(),
@@ -349,9 +643,12 @@ export function WritingProfileContent({
             : null
         );
 
-        toast.success("Writing style analyzed and profile updated!", {
-          duration: 4000,
-        });
+        toast.success(
+          "Writing style analyzed and profile updated! Check all tabs to see the auto-filled information.",
+          {
+            duration: 6000,
+          }
+        );
       }
     } catch (error) {
       console.error("Error analyzing writing style:", error);
@@ -377,17 +674,41 @@ export function WritingProfileContent({
     setShowCreateModal(false);
   };
 
-  const handleAddPostsClick = async () => {
-    if (!newSamplePost.trim()) {
-      // If textarea is empty, just focus it
-      if (textareaRef.current) {
-        textareaRef.current.focus();
-      }
-      return;
-    }
+  const testApiConnection = async () => {
+    try {
+      console.log("Testing API connection...");
 
-    // If there's content, add the post
-    await addSamplePost();
+      // Test basic auth
+      const authResponse = await fetch("/api/test-auth");
+      const authResult = await authResponse.json();
+      console.log("Auth test result:", authResult);
+
+      if (!authResult.success) {
+        toast.error("Auth test failed: " + authResult.error);
+        return;
+      }
+
+      // Test POST with sample data
+      const postResponse = await fetch("/api/test-auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ test: "data" }),
+      });
+      const postResult = await postResponse.json();
+      console.log("POST test result:", postResult);
+
+      if (postResult.success) {
+        toast.success("API connection test successful!");
+      } else {
+        toast.error("POST test failed: " + postResult.error);
+      }
+    } catch (error) {
+      console.error("API test error:", error);
+      toast.error(
+        "API test failed: " +
+          (error instanceof Error ? error.message : "Unknown error")
+      );
+    }
   };
 
   // If no preferences, show loading state while modal handles the creation
@@ -438,89 +759,67 @@ export function WritingProfileContent({
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-indigo-50 to-blue-50">
       <div className="max-w-7xl mx-auto p-6 space-y-8">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex justify-between items-center mb-8">
           <div>
-            <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-900 to-indigo-700 bg-clip-text text-transparent flex items-center gap-3">
-              <Brain className="h-10 w-10 text-purple-600" />
-              Personalization Profile
+            <h1 className="text-3xl font-bold text-slate-900 mb-2">
+              Writing Profile
             </h1>
-            <p className="text-slate-600 mt-2 text-lg">
-              Your personalized assistant learns your unique voice and style
+            <p className="text-slate-600">
+              Customize how AI generates content in your unique voice and style
             </p>
           </div>
-          <div className="flex gap-3">
-            {editMode ? (
-              <>
-                <Button
-                  variant="outline"
-                  onClick={() => setEditMode(false)}
-                  className="shadow-md hover:shadow-lg transition-all duration-200"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={handleSave}
-                  disabled={saving}
-                  className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 shadow-md hover:shadow-lg transition-all duration-200"
-                >
+          <div className="flex gap-2">
+            <Button
+              onClick={editMode ? handleSave : () => setEditMode(true)}
+              disabled={saving}
+              className="bg-purple-600 hover:bg-purple-700 text-white"
+            >
+              {saving ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  Saving...
+                </>
+              ) : editMode ? (
+                <>
                   <Save className="h-4 w-4 mr-2" />
-                  {saving ? "Saving..." : "Save Changes"}
-                </Button>
-              </>
-            ) : (
-              <Button
-                onClick={() => setEditMode(true)}
-                className="bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 shadow-md hover:shadow-lg transition-all duration-200"
-              >
-                <Edit3 className="h-4 w-4 mr-2" />
-                Edit Profile
-              </Button>
-            )}
+                  Save Changes
+                </>
+              ) : (
+                <>
+                  <Edit3 className="h-4 w-4 mr-2" />
+                  Edit Profile
+                </>
+              )}
+            </Button>
           </div>
         </div>
 
-        <Tabs defaultValue="lexical" className="space-y-8">
-          <TabsList className="grid w-full grid-cols-5 lg:w-3/4 bg-white/70 backdrop-blur border shadow-lg">
-            <TabsTrigger
-              value="lexical"
-              className="data-[state=active]:bg-purple-600 data-[state=active]:text-white"
-            >
-              <Type className="h-4 w-4 mr-2" />
-              Lexical
+        <Tabs defaultValue="profile" className="space-y-8">
+          <TabsList className="grid w-full grid-cols-5 mb-8">
+            <TabsTrigger value="profile" className="flex items-center gap-2">
+              <User className="h-4 w-4" />
+              Profile
             </TabsTrigger>
-            <TabsTrigger
-              value="structure"
-              className="data-[state=active]:bg-purple-600 data-[state=active]:text-white"
-            >
-              <Settings className="h-4 w-4 mr-2" />
-              Structure
+            <TabsTrigger value="style" className="flex items-center gap-2">
+              <Palette className="h-4 w-4" />
+              Style
             </TabsTrigger>
-            <TabsTrigger
-              value="tone"
-              className="data-[state=active]:bg-purple-600 data-[state=active]:text-white"
-            >
-              <Volume2 className="h-4 w-4 mr-2" />
+            <TabsTrigger value="tone" className="flex items-center gap-2">
+              <Volume2 className="h-4 w-4" />
               Tone
             </TabsTrigger>
-
-            <TabsTrigger
-              value="training"
-              className="data-[state=active]:bg-purple-600 data-[state=active]:text-white"
-            >
-              <Brain className="h-4 w-4 mr-2" />
+            <TabsTrigger value="training" className="flex items-center gap-2">
+              <Brain className="h-4 w-4" />
               Training
             </TabsTrigger>
-            <TabsTrigger
-              value="insights"
-              className="data-[state=active]:bg-purple-600 data-[state=active]:text-white"
-            >
-              <TrendingUp className="h-4 w-4 mr-2" />
-              Insights
+            <TabsTrigger value="what-works" className="flex items-center gap-2">
+              <Target className="h-4 w-4" />
+              What Works
             </TabsTrigger>
           </TabsList>
 
           {/* Lexical Choices Tab */}
-          <TabsContent value="lexical" className="space-y-8">
+          <TabsContent value="profile" className="space-y-8">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               <Card className="shadow-xl border-0 bg-white/80 backdrop-blur hover:shadow-2xl transition-all duration-300">
                 <CardHeader className="bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-t-lg">
@@ -782,7 +1081,7 @@ export function WritingProfileContent({
           </TabsContent>
 
           {/* Structure Tab */}
-          <TabsContent value="structure" className="space-y-8">
+          <TabsContent value="style" className="space-y-8">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               <Card className="shadow-xl border-0 bg-white/80 backdrop-blur hover:shadow-2xl transition-all duration-300">
                 <CardHeader className="bg-gradient-to-r from-teal-600 to-cyan-600 text-white rounded-t-lg">
@@ -1060,144 +1359,142 @@ export function WritingProfileContent({
           {/* Tone Tab */}
           <TabsContent value="tone" className="space-y-8">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              {/* Voice Characteristics Card */}
               <Card className="shadow-xl border-0 bg-white/80 backdrop-blur hover:shadow-2xl transition-all duration-300">
-                <CardHeader className="bg-gradient-to-r from-red-600 to-orange-600 text-white rounded-t-lg">
+                <CardHeader className="bg-gradient-to-r from-orange-600 to-red-600 text-white rounded-t-lg">
                   <CardTitle className="flex items-center gap-2">
                     <Volume2 className="h-5 w-5" />
                     Voice Characteristics
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="p-8 space-y-8">
-                  {/* Directness Level */}
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center">
-                      <Label className="text-slate-700 font-medium text-lg">
-                        Directness Level:{" "}
-                        {currentPreferences.directness_level || 5}
-                      </Label>
-                    </div>
-                    {editMode ? (
-                      <Slider
-                        value={[currentPreferences.directness_level || 5]}
-                        onValueChange={(value) =>
-                          updateField("directness_level", value[0])
-                        }
-                        max={10}
-                        min={1}
-                        step={1}
-                        className="w-full"
-                      />
-                    ) : (
-                      <div className="w-full bg-slate-200 rounded-full h-3">
-                        <div
-                          className="bg-orange-500 h-3 rounded-full transition-all duration-300"
-                          style={{
-                            width: `${
-                              ((currentPreferences.directness_level || 5) /
-                                10) *
-                              100
-                            }%`,
-                          }}
+                <CardContent className="p-8 space-y-6">
+                  <div className="space-y-4">
+                    <Label className="text-slate-700 font-medium">
+                      Directness Level:{" "}
+                      {currentPreferences.directness_level || 5}
+                    </Label>
+                    <div className="px-2">
+                      {editMode ? (
+                        <Slider
+                          value={[currentPreferences.directness_level || 5]}
+                          onValueChange={(value) =>
+                            updateField("directness_level", value[0])
+                          }
+                          max={10}
+                          min={1}
+                          step={1}
+                          className="w-full"
                         />
+                      ) : (
+                        <div className="relative w-full h-2 bg-slate-200 rounded-full">
+                          <div
+                            className="absolute h-2 bg-orange-500 rounded-full"
+                            style={{
+                              width: `${
+                                ((currentPreferences.directness_level || 5) /
+                                  10) *
+                                100
+                              }%`,
+                            }}
+                          />
+                        </div>
+                      )}
+                      <div className="flex justify-between text-xs text-slate-600 mt-1">
+                        <span>Subtle</span>
+                        <span>Direct</span>
                       </div>
-                    )}
-                    <div className="flex justify-between text-sm text-slate-600">
-                      <span>Subtle</span>
-                      <span>Direct</span>
                     </div>
                   </div>
 
-                  {/* Confidence Level */}
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center">
-                      <Label className="text-slate-700 font-medium text-lg">
-                        Confidence Level:{" "}
-                        {currentPreferences.confidence_level || 5}
-                      </Label>
-                    </div>
-                    {editMode ? (
-                      <Slider
-                        value={[currentPreferences.confidence_level || 5]}
-                        onValueChange={(value) =>
-                          updateField("confidence_level", value[0])
-                        }
-                        max={10}
-                        min={1}
-                        step={1}
-                        className="w-full"
-                      />
-                    ) : (
-                      <div className="w-full bg-slate-200 rounded-full h-3">
-                        <div
-                          className="bg-blue-500 h-3 rounded-full transition-all duration-300"
-                          style={{
-                            width: `${
-                              ((currentPreferences.confidence_level || 5) /
-                                10) *
-                              100
-                            }%`,
-                          }}
+                  <Separator />
+
+                  <div className="space-y-4">
+                    <Label className="text-slate-700 font-medium">
+                      Confidence Level:{" "}
+                      {currentPreferences.confidence_level || 5}
+                    </Label>
+                    <div className="px-2">
+                      {editMode ? (
+                        <Slider
+                          value={[currentPreferences.confidence_level || 5]}
+                          onValueChange={(value) =>
+                            updateField("confidence_level", value[0])
+                          }
+                          max={10}
+                          min={1}
+                          step={1}
+                          className="w-full"
                         />
+                      ) : (
+                        <div className="relative w-full h-2 bg-slate-200 rounded-full">
+                          <div
+                            className="absolute h-2 bg-blue-500 rounded-full"
+                            style={{
+                              width: `${
+                                ((currentPreferences.confidence_level || 5) /
+                                  10) *
+                                100
+                              }%`,
+                            }}
+                          />
+                        </div>
+                      )}
+                      <div className="flex justify-between text-xs text-slate-600 mt-1">
+                        <span>Humble</span>
+                        <span>Confident</span>
                       </div>
-                    )}
-                    <div className="flex justify-between text-sm text-slate-600">
-                      <span>Humble</span>
-                      <span>Confident</span>
                     </div>
                   </div>
 
-                  {/* Energy Level */}
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center">
-                      <Label className="text-slate-700 font-medium text-lg">
-                        Energy Level: {currentPreferences.energy_level || 5}
-                      </Label>
-                    </div>
-                    {editMode ? (
-                      <Slider
-                        value={[currentPreferences.energy_level || 5]}
-                        onValueChange={(value) =>
-                          updateField("energy_level", value[0])
-                        }
-                        max={10}
-                        min={1}
-                        step={1}
-                        className="w-full"
-                      />
-                    ) : (
-                      <div className="w-full bg-slate-200 rounded-full h-3">
-                        <div
-                          className="bg-green-500 h-3 rounded-full transition-all duration-300"
-                          style={{
-                            width: `${
-                              ((currentPreferences.energy_level || 5) / 10) *
-                              100
-                            }%`,
-                          }}
+                  <Separator />
+
+                  <div className="space-y-4">
+                    <Label className="text-slate-700 font-medium">
+                      Energy Level: {currentPreferences.energy_level || 5}
+                    </Label>
+                    <div className="px-2">
+                      {editMode ? (
+                        <Slider
+                          value={[currentPreferences.energy_level || 5]}
+                          onValueChange={(value) =>
+                            updateField("energy_level", value[0])
+                          }
+                          max={10}
+                          min={1}
+                          step={1}
+                          className="w-full"
                         />
+                      ) : (
+                        <div className="relative w-full h-2 bg-slate-200 rounded-full">
+                          <div
+                            className="absolute h-2 bg-green-500 rounded-full"
+                            style={{
+                              width: `${
+                                ((currentPreferences.energy_level || 5) / 10) *
+                                100
+                              }%`,
+                            }}
+                          />
+                        </div>
+                      )}
+                      <div className="flex justify-between text-xs text-slate-600 mt-1">
+                        <span>Calm</span>
+                        <span>Energetic</span>
                       </div>
-                    )}
-                    <div className="flex justify-between text-sm text-slate-600">
-                      <span>Calm</span>
-                      <span>Energetic</span>
                     </div>
                   </div>
                 </CardContent>
               </Card>
 
-              {/* Style Preferences Card */}
               <Card className="shadow-xl border-0 bg-white/80 backdrop-blur hover:shadow-2xl transition-all duration-300">
-                <CardHeader className="bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-t-lg">
+                <CardHeader className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-t-lg">
                   <CardTitle className="flex items-center gap-2">
                     <Palette className="h-5 w-5" />
                     Style Preferences
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="p-8 space-y-8">
-                  {/* Writing Tone */}
-                  <div className="space-y-3">
-                    <Label className="text-slate-700 font-medium text-lg">
+                <CardContent className="p-8 space-y-6">
+                  <div className="space-y-2">
+                    <Label className="text-slate-700 font-medium">
                       Writing Tone
                     </Label>
                     {editMode ? (
@@ -1218,7 +1515,6 @@ export function WritingProfileContent({
                             Professional
                           </SelectItem>
                           <SelectItem value="casual">Casual</SelectItem>
-                          <SelectItem value="friendly">Friendly</SelectItem>
                           <SelectItem value="authoritative">
                             Authoritative
                           </SelectItem>
@@ -1228,19 +1524,23 @@ export function WritingProfileContent({
                           <SelectItem value="inspirational">
                             Inspirational
                           </SelectItem>
+                          <SelectItem value="educational">
+                            Educational
+                          </SelectItem>
                         </SelectContent>
                       </Select>
                     ) : (
-                      <div className="text-2xl font-semibold text-slate-800 capitalize">
+                      <div className="text-slate-900 bg-slate-50 p-3 rounded-lg font-medium">
                         {currentPreferences.writing_style_tone ||
                           "Professional"}
                       </div>
                     )}
                   </div>
 
-                  {/* Humor Usage */}
-                  <div className="space-y-3">
-                    <Label className="text-slate-700 font-medium text-lg">
+                  <Separator />
+
+                  <div className="space-y-2">
+                    <Label className="text-slate-700 font-medium">
                       Humor Usage
                     </Label>
                     {editMode ? (
@@ -1255,26 +1555,22 @@ export function WritingProfileContent({
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="none">No humor</SelectItem>
-                          <SelectItem value="subtle">Subtle humor</SelectItem>
                           <SelectItem value="minimal">Minimal</SelectItem>
-                          <SelectItem value="occasional">
-                            Occasional humor
-                          </SelectItem>
-                          <SelectItem value="frequent">
-                            Frequent humor
-                          </SelectItem>
+                          <SelectItem value="moderate">Moderate</SelectItem>
+                          <SelectItem value="frequent">Frequent</SelectItem>
                         </SelectContent>
                       </Select>
                     ) : (
-                      <div className="text-2xl font-semibold text-slate-800 capitalize">
+                      <div className="text-slate-900 bg-slate-50 p-3 rounded-lg">
                         {currentPreferences.humor_usage || "minimal"}
                       </div>
                     )}
                   </div>
 
-                  {/* Question Usage */}
-                  <div className="space-y-3">
-                    <Label className="text-slate-700 font-medium text-lg">
+                  <Separator />
+
+                  <div className="space-y-2">
+                    <Label className="text-slate-700 font-medium">
                       Question Usage
                     </Label>
                     {editMode ? (
@@ -1288,14 +1584,15 @@ export function WritingProfileContent({
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="frequent">
-                            Frequent questions
+                          <SelectItem value="none">No questions</SelectItem>
+                          <SelectItem value="minimal">
+                            Minimal questions
                           </SelectItem>
                           <SelectItem value="moderate">
                             Moderate questions
                           </SelectItem>
-                          <SelectItem value="minimal">
-                            Minimal questions
+                          <SelectItem value="frequent">
+                            Frequent questions
                           </SelectItem>
                           <SelectItem value="rhetorical">
                             Mostly rhetorical
@@ -1303,51 +1600,52 @@ export function WritingProfileContent({
                         </SelectContent>
                       </Select>
                     ) : (
-                      <div className="text-2xl font-semibold text-slate-800 capitalize">
+                      <div className="text-slate-900 bg-slate-50 p-3 rounded-lg">
                         {currentPreferences.question_usage || "moderate"}
                       </div>
                     )}
                   </div>
 
-                  {/* Formality Level */}
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center">
-                      <Label className="text-slate-700 font-medium text-lg">
-                        Formality Level:{" "}
-                        {currentPreferences.writing_style_formality || 5}
-                      </Label>
-                    </div>
-                    {editMode ? (
-                      <Slider
-                        value={[
-                          currentPreferences.writing_style_formality || 5,
-                        ]}
-                        onValueChange={(value) =>
-                          updateField("writing_style_formality", value[0])
-                        }
-                        max={10}
-                        min={1}
-                        step={1}
-                        className="w-full"
-                      />
-                    ) : (
-                      <div className="w-full bg-slate-200 rounded-full h-3">
-                        <div
-                          className="bg-purple-500 h-3 rounded-full transition-all duration-300"
-                          style={{
-                            width: `${
-                              ((currentPreferences.writing_style_formality ||
-                                5) /
-                                10) *
-                              100
-                            }%`,
-                          }}
+                  <Separator />
+
+                  <div className="space-y-4">
+                    <Label className="text-slate-700 font-medium">
+                      Formality Level:{" "}
+                      {currentPreferences.writing_style_formality || 5}
+                    </Label>
+                    <div className="px-2">
+                      {editMode ? (
+                        <Slider
+                          value={[
+                            currentPreferences.writing_style_formality || 5,
+                          ]}
+                          onValueChange={(value) =>
+                            updateField("writing_style_formality", value[0])
+                          }
+                          max={10}
+                          min={1}
+                          step={1}
+                          className="w-full"
                         />
+                      ) : (
+                        <div className="relative w-full h-2 bg-slate-200 rounded-full">
+                          <div
+                            className="absolute h-2 bg-purple-500 rounded-full"
+                            style={{
+                              width: `${
+                                ((currentPreferences.writing_style_formality ||
+                                  5) /
+                                  10) *
+                                100
+                              }%`,
+                            }}
+                          />
+                        </div>
+                      )}
+                      <div className="flex justify-between text-xs text-slate-600 mt-1">
+                        <span>Casual</span>
+                        <span>Formal</span>
                       </div>
-                    )}
-                    <div className="flex justify-between text-sm text-slate-600">
-                      <span>Casual</span>
-                      <span>Formal</span>
                     </div>
                   </div>
                 </CardContent>
@@ -1368,286 +1666,510 @@ export function WritingProfileContent({
                 <div className="flex justify-between items-start mb-4">
                   <div>
                     <h3 className="text-lg font-semibold text-slate-900 mb-1">
-                      Sample Posts Training
+                      Add Your LinkedIn Posts for AI Training
                     </h3>
                     <p className="text-slate-600 text-sm">
-                      Add LinkedIn posts to help AI learn your style
+                      Paste your existing LinkedIn posts to help the AI learn
+                      your writing style, tone, and preferences. The more
+                      samples you provide, the better the AI can match your
+                      unique voice.
                     </p>
                   </div>
-                  <Button
-                    onClick={handleAddPostsClick}
-                    disabled={analyzingPost}
-                    className="bg-purple-600 hover:bg-purple-700 ml-4"
-                  >
-                    <Brain className="h-4 w-4 mr-2" />
-                    {newSamplePost.trim()
-                      ? analyzingPost
-                        ? "Analyzing..."
-                        : "Add Post"
-                      : "Add Posts"}
-                  </Button>
                 </div>
 
-                <div className="mb-8">
+                <div className="mb-6">
                   <Textarea
                     ref={textareaRef}
-                    placeholder="Paste a sample post to analyze your writing style..."
+                    placeholder="Paste a LinkedIn post that represents your writing style..."
                     value={newSamplePost}
                     onChange={(e) => setNewSamplePost(e.target.value)}
                     className="min-h-[120px] shadow-sm border-slate-200"
                   />
-                </div>
+                  <div className="flex items-center justify-between mt-3">
+                    <p className="text-xs text-slate-500">
+                      {newSamplePost.split(/\s+/).filter(Boolean).length} words
+                      • {newSamplePost.length} characters
+                    </p>
+                    <div className="flex gap-2">
+                      <Dialog
+                        open={showAnalyticsDialog}
+                        onOpenChange={setShowAnalyticsDialog}
+                      >
+                        <DialogTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleCollectAnalytics}
+                            className="flex items-center gap-2"
+                          >
+                            <BarChart3 className="h-4 w-4" />
+                            Add with Analytics
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent className="max-w-6xl w-[95vw] max-h-[90vh] overflow-auto">
+                          <DialogHeader className="pb-6">
+                            <DialogTitle className="text-2xl font-bold flex items-center gap-3">
+                              <BarChart3 className="h-6 w-6 text-purple-600" />
+                              Add Post Analytics
+                            </DialogTitle>
+                            <DialogDescription className="text-base text-gray-600">
+                              Track your LinkedIn post performance to help AI
+                              understand what content resonates with your
+                              audience.
+                            </DialogDescription>
+                          </DialogHeader>
 
-                {(localPreferences?.sample_posts?.length || 0) > 0 ? (
-                  <div className="space-y-4">
-                    {(localPreferences?.sample_posts || []).map(
-                      (post: any, index: number) => (
-                        <div
-                          key={index}
-                          className="p-4 bg-purple-50 rounded-lg border border-purple-200"
-                        >
-                          <div className="flex justify-between items-start mb-2">
-                            <span className="text-sm font-medium text-purple-800">
-                              Sample #{index + 1}
-                            </span>
-                            {editMode && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => removeSamplePost(index)}
-                                className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                              >
-                                Remove
-                              </Button>
+                          <div className="space-y-8">
+                            {/* Post Content Section */}
+                            <div className="space-y-4">
+                              <div className="flex items-center gap-2 mb-4">
+                                <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
+                                  <span className="text-purple-600 font-semibold text-sm">
+                                    1
+                                  </span>
+                                </div>
+                                <h3 className="text-lg font-semibold text-gray-900">
+                                  Post Content
+                                </h3>
+                              </div>
+
+                              <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
+                                <Label
+                                  htmlFor="post-preview"
+                                  className="text-sm font-medium text-gray-700 mb-3 block"
+                                >
+                                  LinkedIn Post Content *
+                                </Label>
+                                <Textarea
+                                  id="post-preview"
+                                  value={analyticsData.postContent}
+                                  onChange={(e) =>
+                                    setAnalyticsData((prev) => ({
+                                      ...prev,
+                                      postContent: e.target.value,
+                                    }))
+                                  }
+                                  className="min-h-[160px] text-sm border-gray-300 focus:border-purple-500"
+                                  placeholder="Paste your LinkedIn post content here..."
+                                />
+                                <div className="flex justify-between items-center mt-3 text-xs text-gray-500">
+                                  <span>
+                                    {
+                                      analyticsData.postContent
+                                        .split(/\s+/)
+                                        .filter(Boolean).length
+                                    }{" "}
+                                    words • {analyticsData.postContent.length}{" "}
+                                    characters
+                                  </span>
+                                  {analyticsData.postContent.length > 3000 && (
+                                    <span className="text-amber-600 font-medium">
+                                      ⚠️ Very long post
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                  <Label
+                                    htmlFor="linkedin-url"
+                                    className="text-sm font-medium text-gray-700 mb-2 block"
+                                  >
+                                    LinkedIn Post URL (optional)
+                                  </Label>
+                                  <Input
+                                    id="linkedin-url"
+                                    placeholder="https://www.linkedin.com/posts/username/..."
+                                    value={analyticsData.linkedinUrl}
+                                    onChange={(e) =>
+                                      setAnalyticsData((prev) => ({
+                                        ...prev,
+                                        linkedinUrl: e.target.value,
+                                      }))
+                                    }
+                                    className="border-gray-300 focus:border-purple-500"
+                                  />
+                                </div>
+
+                                <div>
+                                  <Label
+                                    htmlFor="post-date"
+                                    className="text-sm font-medium text-gray-700 mb-2 block"
+                                  >
+                                    Post Date (optional)
+                                  </Label>
+                                  <Input
+                                    id="post-date"
+                                    type="date"
+                                    value={analyticsData.postDate}
+                                    onChange={(e) =>
+                                      setAnalyticsData((prev) => ({
+                                        ...prev,
+                                        postDate: e.target.value,
+                                      }))
+                                    }
+                                    className="border-gray-300 focus:border-purple-500"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Performance Metrics Section */}
+                            <div className="space-y-4">
+                              <div className="flex items-center gap-2 mb-4">
+                                <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                                  <span className="text-blue-600 font-semibold text-sm">
+                                    2
+                                  </span>
+                                </div>
+                                <h3 className="text-lg font-semibold text-gray-900">
+                                  Performance Metrics
+                                </h3>
+                              </div>
+
+                              <div className="bg-blue-50 rounded-lg p-6 border border-blue-200">
+                                <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+                                  <div className="space-y-3">
+                                    <div className="flex items-center gap-2">
+                                      <Eye className="h-5 w-5 text-blue-600" />
+                                      <Label
+                                        htmlFor="impressions"
+                                        className="text-sm font-medium text-gray-700"
+                                      >
+                                        Impressions
+                                      </Label>
+                                    </div>
+                                    <Input
+                                      id="impressions"
+                                      type="number"
+                                      placeholder="1,250"
+                                      value={analyticsData.impressions}
+                                      onChange={(e) =>
+                                        setAnalyticsData((prev) => ({
+                                          ...prev,
+                                          impressions: e.target.value,
+                                        }))
+                                      }
+                                      className="text-base font-medium bg-white border-gray-300 focus:border-blue-500"
+                                    />
+                                    <p className="text-xs text-gray-600">
+                                      How many people saw this post
+                                    </p>
+                                  </div>
+
+                                  <div className="space-y-3">
+                                    <div className="flex items-center gap-2">
+                                      <Heart className="h-5 w-5 text-red-500" />
+                                      <Label
+                                        htmlFor="likes"
+                                        className="text-sm font-medium text-gray-700"
+                                      >
+                                        Likes
+                                      </Label>
+                                    </div>
+                                    <Input
+                                      id="likes"
+                                      type="number"
+                                      placeholder="45"
+                                      value={analyticsData.likes}
+                                      onChange={(e) =>
+                                        setAnalyticsData((prev) => ({
+                                          ...prev,
+                                          likes: e.target.value,
+                                        }))
+                                      }
+                                      className="text-base font-medium bg-white border-gray-300 focus:border-red-300 focus:ring-red-300"
+                                    />
+                                    <p className="text-xs text-gray-600">
+                                      Total reactions received
+                                    </p>
+                                  </div>
+
+                                  <div className="space-y-3">
+                                    <div className="flex items-center gap-2">
+                                      <MessageCircle className="h-5 w-5 text-green-600" />
+                                      <Label
+                                        htmlFor="comments"
+                                        className="text-sm font-medium text-gray-700"
+                                      >
+                                        Comments
+                                      </Label>
+                                    </div>
+                                    <Input
+                                      id="comments"
+                                      type="number"
+                                      placeholder="12"
+                                      value={analyticsData.comments}
+                                      onChange={(e) =>
+                                        setAnalyticsData((prev) => ({
+                                          ...prev,
+                                          comments: e.target.value,
+                                        }))
+                                      }
+                                      className="text-base font-medium bg-white border-gray-300 focus:border-green-300 focus:ring-green-300"
+                                    />
+                                    <p className="text-xs text-gray-600">
+                                      Number of comments
+                                    </p>
+                                  </div>
+
+                                  <div className="space-y-3">
+                                    <div className="flex items-center gap-2">
+                                      <Share className="h-5 w-5 text-purple-600" />
+                                      <Label
+                                        htmlFor="shares"
+                                        className="text-sm font-medium text-gray-700"
+                                      >
+                                        Shares
+                                      </Label>
+                                    </div>
+                                    <Input
+                                      id="shares"
+                                      type="number"
+                                      placeholder="8"
+                                      value={analyticsData.shares}
+                                      onChange={(e) =>
+                                        setAnalyticsData((prev) => ({
+                                          ...prev,
+                                          shares: e.target.value,
+                                        }))
+                                      }
+                                      className="text-base font-medium bg-white border-gray-300 focus:border-purple-300 focus:ring-purple-300"
+                                    />
+                                    <p className="text-xs text-gray-600">
+                                      Times shared or reposted
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Engagement Analysis Section */}
+                            {analyticsData.impressions &&
+                              parseInt(analyticsData.impressions) > 0 && (
+                                <div className="space-y-4">
+                                  <div className="flex items-center gap-2 mb-4">
+                                    <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                                      <span className="text-green-600 font-semibold text-sm">
+                                        ✓
+                                      </span>
+                                    </div>
+                                    <h3 className="text-lg font-semibold text-gray-900">
+                                      Engagement Analysis
+                                    </h3>
+                                  </div>
+
+                                  <div className="bg-gradient-to-br from-green-50 to-blue-50 rounded-lg p-6 border border-green-200">
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                      <div className="text-center">
+                                        <div className="text-3xl font-bold text-green-600 mb-1">
+                                          {(
+                                            ((parseInt(
+                                              analyticsData.likes || "0"
+                                            ) +
+                                              parseInt(
+                                                analyticsData.comments || "0"
+                                              ) +
+                                              parseInt(
+                                                analyticsData.shares || "0"
+                                              )) /
+                                              parseInt(
+                                                analyticsData.impressions
+                                              )) *
+                                            100
+                                          ).toFixed(2)}
+                                          %
+                                        </div>
+                                        <div className="text-sm font-medium text-gray-700">
+                                          Engagement Rate
+                                        </div>
+                                        <div className="text-xs text-gray-600 mt-1">
+                                          {((parseInt(
+                                            analyticsData.likes || "0"
+                                          ) +
+                                            parseInt(
+                                              analyticsData.comments || "0"
+                                            ) +
+                                            parseInt(
+                                              analyticsData.shares || "0"
+                                            )) /
+                                            parseInt(
+                                              analyticsData.impressions
+                                            )) *
+                                            100 >=
+                                          3
+                                            ? "🔥 Great!"
+                                            : ((parseInt(
+                                                analyticsData.likes || "0"
+                                              ) +
+                                                parseInt(
+                                                  analyticsData.comments || "0"
+                                                ) +
+                                                parseInt(
+                                                  analyticsData.shares || "0"
+                                                )) /
+                                                parseInt(
+                                                  analyticsData.impressions
+                                                )) *
+                                                100 >=
+                                              1
+                                            ? "👍 Good"
+                                            : "📈 Can improve"}
+                                        </div>
+                                      </div>
+
+                                      <div className="text-center">
+                                        <div className="text-3xl font-bold text-blue-600 mb-1">
+                                          {(
+                                            parseInt(
+                                              analyticsData.likes || "0"
+                                            ) +
+                                            parseInt(
+                                              analyticsData.comments || "0"
+                                            ) +
+                                            parseInt(
+                                              analyticsData.shares || "0"
+                                            )
+                                          ).toLocaleString()}
+                                        </div>
+                                        <div className="text-sm font-medium text-gray-700">
+                                          Total Engagement
+                                        </div>
+                                        <div className="text-xs text-gray-600 mt-1">
+                                          All interactions combined
+                                        </div>
+                                      </div>
+
+                                      <div className="text-center">
+                                        <div className="text-3xl font-bold text-purple-600 mb-1">
+                                          {parseInt(
+                                            analyticsData.impressions
+                                          ).toLocaleString()}
+                                        </div>
+                                        <div className="text-sm font-medium text-gray-700">
+                                          Total Reach
+                                        </div>
+                                        <div className="text-xs text-gray-600 mt-1">
+                                          People who saw this post
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    <div className="mt-6 p-4 bg-white rounded-lg border border-green-200">
+                                      <div className="flex items-start gap-3">
+                                        <div className="text-2xl">💡</div>
+                                        <div>
+                                          <div className="text-sm font-medium text-gray-900 mb-1">
+                                            AI Learning Insight
+                                          </div>
+                                          <div className="text-sm text-gray-700">
+                                            This performance data helps our AI
+                                            understand what content styles,
+                                            topics, and formats work best for
+                                            your audience.
+                                            {((parseInt(
+                                              analyticsData.likes || "0"
+                                            ) +
+                                              parseInt(
+                                                analyticsData.comments || "0"
+                                              ) +
+                                              parseInt(
+                                                analyticsData.shares || "0"
+                                              )) /
+                                              parseInt(
+                                                analyticsData.impressions
+                                              )) *
+                                              100 >=
+                                              3 && (
+                                              <span className="text-green-600 font-medium">
+                                                {" "}
+                                                This post performed
+                                                exceptionally well and will be
+                                                used as a high-quality training
+                                                example!
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+
+                            {!analyticsData.impressions && (
+                              <div className="text-center py-8">
+                                <BarChart3 className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                                <h4 className="text-lg font-medium text-gray-900 mb-2">
+                                  Add Performance Data
+                                </h4>
+                                <p className="text-gray-600 mb-4">
+                                  Enter impression data above to see engagement
+                                  analysis and AI insights
+                                </p>
+                              </div>
                             )}
                           </div>
-                          <p className="text-slate-700 text-sm line-clamp-3">
-                            {post.content}
-                          </p>
-                          {post.analyzed_at && (
-                            <div className="text-xs text-purple-600 mt-2">
-                              Analyzed:{" "}
-                              {new Date(post.analyzed_at).toLocaleDateString()}
+
+                          <DialogFooter className="pt-8 border-t border-gray-200 mt-8">
+                            <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+                              <Button
+                                variant="outline"
+                                onClick={() => {
+                                  setShowAnalyticsDialog(false);
+                                  resetAnalyticsData();
+                                }}
+                                className="w-full sm:w-auto order-2 sm:order-1"
+                              >
+                                Cancel
+                              </Button>
+                              <Button
+                                onClick={addSamplePostWithAnalytics}
+                                disabled={
+                                  analyzingPost ||
+                                  !analyticsData.postContent.trim()
+                                }
+                                className="bg-purple-600 hover:bg-purple-700 w-full sm:w-auto order-1 sm:order-2"
+                              >
+                                {analyzingPost ? (
+                                  <>
+                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                                    Adding & Analyzing...
+                                  </>
+                                ) : (
+                                  <>
+                                    <PlusCircle className="h-4 w-4 mr-2" />
+                                    Add Sample Post with Analytics
+                                  </>
+                                )}
+                              </Button>
                             </div>
-                          )}
-                        </div>
-                      )
-                    )}
+                          </DialogFooter>
+                        </DialogContent>
+                      </Dialog>
+                      <Button
+                        onClick={handleAddPostsClick}
+                        disabled={analyzingPost}
+                        className="bg-purple-600 hover:bg-purple-700"
+                      >
+                        <Brain className="h-4 w-4 mr-2" />
+                        {newSamplePost.trim()
+                          ? analyzingPost
+                            ? "Analyzing..."
+                            : "Add Sample Post"
+                          : "Add Sample Post"}
+                      </Button>
+                    </div>
                   </div>
-                ) : (
-                  <div className="text-center py-8">
-                    <Brain className="h-12 w-12 text-slate-400 mx-auto mb-2" />
-                    <h3 className="text-lg font-semibold text-slate-900 mb-2">
-                      No sample posts yet
-                    </h3>
-                    <p className="text-slate-600 text-sm">
-                      Add posts to improve AI personalization
-                    </p>
-                  </div>
-                )}
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
 
-          {/* Insights Tab */}
-          <TabsContent value="insights" className="space-y-8">
-            <Card className="shadow-xl border-0 bg-white/80 backdrop-blur hover:shadow-2xl transition-all duration-300">
-              <CardHeader className="bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-t-lg">
-                <CardTitle className="flex items-center gap-2">
-                  <TrendingUp className="h-5 w-5" />
-                  Learning Progress
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-8">
-                {currentPreferences?.sample_posts?.length &&
-                currentPreferences?.sample_posts?.length > 0 ? (
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    <div className="space-y-6">
-                      <div className="space-y-4">
-                        <Label className="text-slate-700 font-medium text-lg">
-                          Profile Completeness
-                        </Label>
-                        <div className="space-y-2">
-                          <div className="flex justify-between text-sm">
-                            <span>Profile Progress</span>
-                            <span>
-                              {Math.round(
-                                (((currentPreferences?.sample_posts?.length ||
-                                  0) +
-                                  (currentPreferences?.frequently_used_words
-                                    ?.length || 0) +
-                                  (currentPreferences?.voice_attributes
-                                    ?.length || 0)) /
-                                  3) *
-                                  20
-                              )}
-                              %
-                            </span>
-                          </div>
-                          <div className="w-full bg-slate-200 rounded-full h-2">
-                            <div
-                              className="bg-green-600 h-2 rounded-full transition-all duration-300"
-                              style={{
-                                width: `${Math.round(
-                                  (((currentPreferences?.sample_posts?.length ||
-                                    0) +
-                                    (currentPreferences?.frequently_used_words
-                                      ?.length || 0) +
-                                    (currentPreferences?.voice_attributes
-                                      ?.length || 0)) /
-                                    3) *
-                                    20
-                                )}%`,
-                              }}
-                            />
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="space-y-4">
-                        <Label className="text-slate-700 font-medium text-lg">
-                          Training Data Quality
-                        </Label>
-                        <div className="space-y-3">
-                          <div className="flex justify-between items-center">
-                            <span className="text-sm text-slate-600">
-                              Sample Posts
-                            </span>
-                            <Badge
-                              variant={
-                                currentPreferences?.sample_posts?.length >= 3
-                                  ? "default"
-                                  : "secondary"
-                              }
-                            >
-                              {currentPreferences?.sample_posts?.length || 0}/5
-                            </Badge>
-                          </div>
-                          <div className="flex justify-between items-center">
-                            <span className="text-sm text-slate-600">
-                              Vocabulary Items
-                            </span>
-                            <Badge
-                              variant={
-                                currentPreferences?.frequently_used_words
-                                  ?.length >= 10
-                                  ? "default"
-                                  : "secondary"
-                              }
-                            >
-                              {currentPreferences?.frequently_used_words
-                                ?.length || 0}
-                              /20
-                            </Badge>
-                          </div>
-                          <div className="flex justify-between items-center">
-                            <span className="text-sm text-slate-600">
-                              Voice Attributes
-                            </span>
-                            <Badge
-                              variant={
-                                currentPreferences?.voice_attributes?.length >=
-                                5
-                                  ? "default"
-                                  : "secondary"
-                              }
-                            >
-                              {currentPreferences?.voice_attributes?.length ||
-                                0}
-                              /10
-                            </Badge>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="space-y-6">
-                      <div className="space-y-4">
-                        <Label className="text-slate-700 font-medium text-lg">
-                          Recent Updates
-                        </Label>
-                        <div className="text-slate-600 text-sm space-y-2">
-                          <div>
-                            Last updated:{" "}
-                            {currentPreferences?.updated_at
-                              ? new Date(
-                                  currentPreferences.updated_at
-                                ).toLocaleDateString()
-                              : "Never"}
-                          </div>
-                          <div>
-                            Created:{" "}
-                            {currentPreferences?.created_at
-                              ? new Date(
-                                  currentPreferences.created_at
-                                ).toLocaleDateString()
-                              : "Unknown"}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="space-y-4">
-                        <Label className="text-slate-700 font-medium text-lg">
-                          Recommendations
-                        </Label>
-                        <div className="space-y-2 text-sm">
-                          {currentPreferences?.sample_posts?.length < 3 && (
-                            <div className="p-3 bg-yellow-50 text-yellow-800 rounded-lg">
-                              • Add more sample posts for better style learning
-                            </div>
-                          )}
-                          {currentPreferences?.frequently_used_words?.length <
-                            10 && (
-                            <div className="p-3 bg-blue-50 text-blue-800 rounded-lg">
-                              • Add more frequently used words and phrases
-                            </div>
-                          )}
-                          {currentPreferences?.voice_attributes?.length < 5 && (
-                            <div className="p-3 bg-purple-50 text-purple-800 rounded-lg">
-                              • Define more voice attributes for personality
-                            </div>
-                          )}
-                          {currentPreferences?.sample_posts?.length >= 3 &&
-                            currentPreferences?.frequently_used_words?.length >=
-                              10 &&
-                            currentPreferences?.voice_attributes?.length >=
-                              5 && (
-                              <div className="p-3 bg-green-50 text-green-800 rounded-lg">
-                                ✓ Your profile is well-configured for AI
-                                training!
-                              </div>
-                            )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="text-center py-16">
-                    <TrendingUp className="h-16 w-16 text-slate-400 mx-auto mb-4" />
-                    <h3 className="text-xl font-semibold text-slate-900 mb-2">
-                      No training data available
-                    </h3>
-                    <p className="text-slate-600 mb-6">
-                      Add sample posts in the Training tab to see AI learning
-                      insights and performance analytics.
-                    </p>
-                    <Button
-                      onClick={() => {
-                        // Switch to training tab
-                        const trainingTab = document.querySelector(
-                          '[data-state="inactive"][value="training"]'
-                        ) as HTMLElement;
-                        if (trainingTab) trainingTab.click();
-                      }}
-                      className="bg-purple-600 hover:bg-purple-700"
-                    >
-                      <Brain className="h-4 w-4 mr-2" />
-                      Go to Training
-                    </Button>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+          {/* What Works Tab */}
+          <TabsContent value="what-works" className="space-y-8">
+            <WhatWorksInsights userId={userId} />
           </TabsContent>
         </Tabs>
       </div>

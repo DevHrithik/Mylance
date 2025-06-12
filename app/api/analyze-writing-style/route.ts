@@ -41,13 +41,15 @@ Please analyze and return a JSON object with the following structure:
 }
 
 Focus on:
-- Common words and phrases they use
-- Their tone and energy
+- Extract at least 10-15 frequently used words (avoid common words like "the", "and", "is")
+- Identify 3-5 unique signature expressions or phrases they commonly use
+- Their tone and energy level
 - How direct or subtle they are
 - Their confidence level
-- Any unique expressions or signature phrases
 - Their use of emojis and casual language
-- Sentence structure preferences`;
+- Sentence structure preferences
+
+Make sure to populate frequently_used_words and signature_expressions arrays with actual content from the posts.`;
 
     const completion = await openai.chat.completions.create({
       model: "gpt-4",
