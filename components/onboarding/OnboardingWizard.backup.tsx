@@ -340,7 +340,7 @@ export function OnboardingWizard() {
                   <span className="text-teal-600 text-xl font-medium">1 →</span>
                   <h1 className="text-3xl font-normal text-gray-900 mt-4 mb-6">
                     What&apos;s the best email for you to receive leads and
-                    communications from Mylance?*
+                    communications from Mylance?
                   </h1>
                   <p className="text-gray-600 italic text-base mb-8">
                     We respect your privacy and will use your email only to send
@@ -384,7 +384,7 @@ export function OnboardingWizard() {
                 <div className="mb-8">
                   <span className="text-teal-600 text-xl font-medium">2 →</span>
                   <h1 className="text-3xl font-normal text-gray-900 mt-4 mb-6">
-                    LinkedIn Profile URL:*
+                    LinkedIn Profile URL:
                   </h1>
                   <p className="text-gray-600 italic text-base mb-8">
                     So we can capture your professional headline, experience,
@@ -429,7 +429,7 @@ export function OnboardingWizard() {
                 <div className="mb-8">
                   <span className="text-teal-600 text-xl font-medium">3 →</span>
                   <h1 className="text-3xl font-normal text-gray-900 mt-4 mb-6">
-                    What&apos;s your first name?*
+                    What&apos;s your first name?
                   </h1>
                 </div>
 
@@ -504,7 +504,7 @@ export function OnboardingWizard() {
                 <span className="text-teal-600 text-xl font-medium">4 →</span>
                 <h1 className="text-3xl font-normal text-gray-900 mt-4 mb-6">
                   What kind of business do you have? (Select the option that
-                  best describes your business type and size.)*
+                  best describes your business type and size.)
                 </h1>
               </div>
 
@@ -558,7 +558,7 @@ export function OnboardingWizard() {
               <div className="mb-8">
                 <span className="text-teal-600 text-xl font-medium">5 →</span>
                 <h1 className="text-3xl font-normal text-gray-900 mt-4 mb-6">
-                  What&apos;s the size of your business?*
+                  What&apos;s the size of your business?
                 </h1>
               </div>
 
@@ -618,7 +618,7 @@ export function OnboardingWizard() {
               <div className="mb-8">
                 <span className="text-teal-600 text-xl font-medium">6 →</span>
                 <h1 className="text-3xl font-normal text-gray-900 mt-4 mb-6">
-                  How far along is your business?*
+                  How far along is your business?
                 </h1>
                 <p className="text-gray-600 italic text-base mb-8">
                   Select what most closely represents your business
@@ -674,7 +674,7 @@ export function OnboardingWizard() {
                 <span className="text-teal-600 text-xl font-medium">7 →</span>
                 <h1 className="text-3xl font-normal text-gray-900 mt-4 mb-6">
                   How important do you believe LinkedIn content is to your
-                  marketing / business development efforts?*
+                  marketing / business development efforts?
                 </h1>
               </div>
 
@@ -741,7 +741,7 @@ export function OnboardingWizard() {
               <div className="mb-8">
                 <span className="text-teal-600 text-xl font-medium">8 →</span>
                 <h1 className="text-3xl font-normal text-gray-900 mt-4 mb-6">
-                  How willing are you to invest in marketing for your business?*
+                  How willing are you to invest in marketing for your business?
                 </h1>
               </div>
 
@@ -807,7 +807,7 @@ export function OnboardingWizard() {
                 <span className="text-teal-600 text-xl font-medium">9 →</span>
                 <h1 className="text-3xl font-normal text-gray-900 mt-4 mb-6">
                   What&apos;s your current mindset around posting content on
-                  LinkedIn?*
+                  LinkedIn?
                 </h1>
               </div>
 
@@ -860,7 +860,7 @@ export function OnboardingWizard() {
               <div className="mb-8">
                 <span className="text-teal-600 text-xl font-medium">10 →</span>
                 <h1 className="text-3xl font-normal text-gray-900 mt-4 mb-6">
-                  How often do you post on LinkedIn right now?*
+                  How often do you post on LinkedIn right now?
                 </h1>
               </div>
 
@@ -920,7 +920,7 @@ export function OnboardingWizard() {
               <div className="mb-8">
                 <span className="text-teal-600 text-xl font-medium">11 →</span>
                 <h1 className="text-3xl font-normal text-gray-900 mt-4 mb-6">
-                  How do you currently attract clients / customers?*
+                  How do you currently attract clients / customers?
                 </h1>
                 <p className="text-gray-600 italic text-base mb-4">
                   Select all that apply
@@ -975,7 +975,7 @@ export function OnboardingWizard() {
                 <span className="text-teal-600 text-xl font-medium">12 →</span>
                 <h1 className="text-3xl font-normal text-gray-900 mt-4 mb-6">
                   In 2-3 sentences, describe your ideal target client. The more
-                  specific and detailed, the better*
+                  specific and detailed, the better
                 </h1>
                 <p className="text-gray-600 italic text-base mb-8">
                   My ideal clients are early stage B2B, Fintech, SaaS companies
@@ -1021,7 +1021,7 @@ export function OnboardingWizard() {
                 <span className="text-teal-600 text-xl font-medium">13 →</span>
                 <h1 className="text-3xl font-normal text-gray-900 mt-4 mb-6">
                   Describe your client&apos;s typical top pain points (that you
-                  solve).*
+                  solve).
                 </h1>
                 <p className="text-gray-600 italic text-base mb-8">
                   E.g. 1. Struggle to generate consistent leads, 2. Poor
@@ -1069,7 +1069,7 @@ export function OnboardingWizard() {
                 <h1 className="text-3xl font-normal text-gray-900 mt-4 mb-6">
                   Describe the top 2-3 ways you provide unique value to your
                   clients (building on the pain points they have in the previous
-                  question)*
+                  question)
                 </h1>
                 <p className="text-gray-600 italic text-base mb-8">
                   E.g., I build a repeatable lead generation engine using modern
@@ -1117,7 +1117,7 @@ export function OnboardingWizard() {
                 <span className="text-teal-600 text-xl font-medium">15 →</span>
                 <h1 className="text-3xl font-normal text-gray-900 mt-4 mb-6">
                   What are 2-3 &apos;proof points&apos; that back up your value
-                  add?*
+                  add?
                 </h1>
                 <p className="text-gray-600 italic text-base mb-8">
                   E.g. 1. Increased lead generation by 35% within 3 months
@@ -1168,7 +1168,7 @@ export function OnboardingWizard() {
               <div className="mb-8">
                 <span className="text-teal-600 text-xl font-medium">16 →</span>
                 <h1 className="text-3xl font-normal text-gray-900 mt-4 mb-6">
-                  Where did you hear about Mylance?*
+                  Where did you hear about Mylance?
                 </h1>
               </div>
 

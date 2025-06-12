@@ -86,11 +86,48 @@ export function ProfileLockedModal({
 
   const handleLogout = async () => {
     try {
+      setIsLoading(true);
+
+      // Sign out from Supabase
       await supabase.auth.signOut();
-      router.push("/login");
+
+      // Clear all Supabase-related data from localStorage
+      Object.keys(localStorage).forEach((key) => {
+        if (
+          key.startsWith("sb-") ||
+          key.includes("supabase") ||
+          key.includes("auth-token") ||
+          key.includes("refresh-token") ||
+          key.includes("access-token")
+        ) {
+          localStorage.removeItem(key);
+        }
+      });
+
+      // Clear all Supabase-related data from sessionStorage
+      Object.keys(sessionStorage).forEach((key) => {
+        if (
+          key.startsWith("sb-") ||
+          key.includes("supabase") ||
+          key.includes("auth-token") ||
+          key.includes("refresh-token") ||
+          key.includes("access-token")
+        ) {
+          sessionStorage.removeItem(key);
+        }
+      });
+
+      // Use hard redirect to guarantee clean state and prevent redirect loops
+      window.location.replace("/login");
     } catch (error) {
       console.error("Logout error:", error);
       toast.error("Failed to logout");
+      setIsLoading(false);
+
+      // Fallback: still try to redirect even if signOut failed
+      setTimeout(() => {
+        window.location.replace("/login");
+      }, 1000);
     }
   };
 
@@ -219,10 +256,11 @@ export function ProfileLockedModal({
                   <Button
                     variant="outline"
                     onClick={handleLogout}
+                    disabled={isLoading}
                     className="w-full text-red-600 border-red-200 hover:bg-red-50 py-2"
                   >
                     <LogOut className="h-4 w-4 mr-2" />
-                    Logout
+                    {isLoading ? "Logging out..." : "Logout"}
                   </Button>
                 </div>
 
