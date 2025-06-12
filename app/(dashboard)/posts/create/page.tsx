@@ -88,7 +88,7 @@ async function CreatePostServerWrapper({
               Post not found
             </h3>
             <p className="text-gray-600">
-              The post you're trying to edit doesn't exist or you don't have
+              The post you are trying to edit does not exist or you do not have
               permission to edit it.
             </p>
           </div>
@@ -112,7 +112,7 @@ async function CreatePostServerWrapper({
               Prompt not found
             </h3>
             <p className="text-gray-600">
-              The prompt you're trying to use doesn't exist or you don't have
+              The prompt you are trying to use does not exist or you do not have
               access to it.
             </p>
           </div>

@@ -128,25 +128,176 @@ export function AnalyticsDashboard({
         throw new Error("Failed to regenerate insights");
       }
 
-      toast.success("Insights regenerated successfully!");
-      // Optionally trigger a revalidation here
+      const result = await response.json();
+      toast.success(`Generated ${result.count || 0} new insights!`);
+
+      // Refresh the page to show new insights
+      window.location.reload();
     } catch (error) {
       console.error("Error regenerating insights:", error);
       toast.error("Failed to regenerate insights");
     } finally {
       setRegeneratingInsights(false);
+      setShowRegenerationModal(false);
     }
   };
 
   // Generate learning insights based on performance data
   const learningInsights = useMemo((): LearningInsight[] => {
+    // Use real insights from database instead of generic ones
+    if (insights && insights.length > 0) {
+      return insights.map((insight): LearningInsight => {
+        const data = insight.insight_data || {};
+
+        switch (insight.insight_type) {
+          case "content_performance":
+            return {
+              category: "working",
+              title: `${
+                data.best_content_type?.charAt(0).toUpperCase() +
+                data.best_content_type?.slice(1)
+              } Content Performs Best`,
+              description: `Your ${data.best_content_type} posts average ${data.avg_engagement}% engagement with ${data.post_count} posts analyzed`,
+              metric: `${data.avg_engagement}%`,
+              impact:
+                insight.performance_impact > 15
+                  ? "high"
+                  : insight.performance_impact > 8
+                  ? "medium"
+                  : "low",
+              recommendation:
+                insight.recommendations?.[0] ||
+                "Continue creating this type of content",
+            };
+
+          case "engagement_analysis":
+            return {
+              category:
+                data.engagement_depth === "shallow" ? "improvement" : "working",
+              title:
+                data.engagement_depth === "shallow"
+                  ? "Low Comment Engagement"
+                  : "Strong Comment Engagement",
+              description: `Comment rate: ${data.comment_rate}%, Like rate: ${data.like_rate}%`,
+              metric: `${data.comment_rate}% comments`,
+              impact:
+                insight.performance_impact > 15
+                  ? "high"
+                  : insight.performance_impact > 8
+                  ? "medium"
+                  : "low",
+              recommendation:
+                insight.recommendations?.[0] ||
+                "Continue your engagement strategy",
+            };
+
+          case "content_length_optimization":
+            return {
+              category: "opportunity",
+              title: "Content Length Optimization",
+              description: `Current average: ${data.current_avg_length} characters. Optimal range: ${data.optimal_range}`,
+              metric: `${data.current_avg_length} chars`,
+              impact:
+                insight.performance_impact > 15
+                  ? "high"
+                  : insight.performance_impact > 8
+                  ? "medium"
+                  : "low",
+              recommendation:
+                insight.recommendations?.[0] || "Optimize your content length",
+            };
+
+          case "posting_consistency":
+            return {
+              category:
+                data.consistency_score >= 80 ? "working" : "opportunity",
+              title:
+                data.consistency_score >= 80
+                  ? "Great Posting Consistency"
+                  : "Consistency Opportunity",
+              description: `Current frequency: ${data.current_frequency} posts. Recommended: ${data.recommended_frequency}`,
+              metric: `${data.current_frequency} posts`,
+              impact:
+                insight.performance_impact > 15
+                  ? "high"
+                  : insight.performance_impact > 8
+                  ? "medium"
+                  : "low",
+              recommendation:
+                insight.recommendations?.[0] ||
+                "Maintain your posting schedule",
+            };
+
+          case "performance_stability":
+            return {
+              category: "opportunity",
+              title: "Performance Variance Detected",
+              description: `Engagement varies by ${data.engagement_variance}%. Your best post: ${data.best_performing_rate}%`,
+              metric: `${data.engagement_variance}% variance`,
+              impact:
+                insight.performance_impact > 15
+                  ? "high"
+                  : insight.performance_impact > 8
+                  ? "medium"
+                  : "low",
+              recommendation:
+                insight.recommendations?.[0] ||
+                "Analyze your top performing content",
+            };
+
+          case "engagement_depth":
+            return {
+              category: "improvement",
+              title: "Engagement Depth Analysis",
+              description: `${
+                data.engagement_depth === "shallow"
+                  ? "Mostly likes, few comments"
+                  : "Good comment engagement"
+              }`,
+              metric: `${(parseFloat(data.comment_rate) || 0).toFixed(
+                1
+              )}% comments`,
+              impact:
+                insight.performance_impact > 15
+                  ? "high"
+                  : insight.performance_impact > 8
+                  ? "medium"
+                  : "low",
+              recommendation:
+                insight.recommendations?.[0] ||
+                "Focus on driving more meaningful engagement",
+            };
+
+          default:
+            return {
+              category: "working",
+              title: insight.insight_type
+                .replace(/_/g, " ")
+                .replace(/\b\w/g, (l: string) => l.toUpperCase()),
+              description: "AI analysis of your content performance",
+              metric: `${(insight.confidence_score * 100).toFixed(0)}%`,
+              impact:
+                insight.performance_impact > 15
+                  ? "high"
+                  : insight.performance_impact > 8
+                  ? "medium"
+                  : "low",
+              recommendation:
+                insight.recommendations?.[0] ||
+                "Continue monitoring performance",
+            };
+        }
+      });
+    }
+
+    // Fallback to basic analysis if no database insights
     if (!stats || !topPosts) return [];
 
-    const insights: LearningInsight[] = [];
+    const fallbackInsights: LearningInsight[] = [];
 
-    // What's working well
+    // Basic engagement analysis
     if (stats.averageEngagementRate > 2.5) {
-      insights.push({
+      fallbackInsights.push({
         category: "working",
         title: "Strong Engagement Rate",
         description: `Your content is performing above industry average with ${stats.averageEngagementRate.toFixed(
@@ -157,9 +308,20 @@ export function AnalyticsDashboard({
         recommendation:
           "Continue your current content strategy - it's resonating well with your audience!",
       });
+    } else if (stats.averageEngagementRate < 1.5) {
+      fallbackInsights.push({
+        category: "improvement",
+        title: "Engagement Below Average",
+        description:
+          "Your engagement rate could be improved with more interactive content",
+        metric: `${stats.averageEngagementRate.toFixed(1)}%`,
+        impact: "high",
+        recommendation:
+          "Try asking questions, sharing personal stories, or creating polls to boost engagement",
+      });
     }
 
-    // Best performing content type
+    // Content type analysis
     const contentTypes = topPosts.reduce((acc: any, post) => {
       const type = post.content_type || "general";
       if (!acc[type]) acc[type] = { count: 0, totalEngagement: 0 };
@@ -179,7 +341,7 @@ export function AnalyticsDashboard({
     );
 
     if (bestType && bestType.count >= 2) {
-      insights.push({
+      fallbackInsights.push({
         category: "working",
         title: `${
           bestType.type.charAt(0).toUpperCase() + bestType.type.slice(1)
@@ -193,36 +355,21 @@ export function AnalyticsDashboard({
       });
     }
 
-    // Improvement opportunities
-    if (stats.averageEngagementRate < 1.5) {
-      insights.push({
-        category: "improvement",
-        title: "Engagement Below Average",
-        description:
-          "Your engagement rate could be improved with more interactive content",
-        metric: `${stats.averageEngagementRate.toFixed(1)}%`,
-        impact: "high",
-        recommendation:
-          "Try asking questions, sharing personal stories, or creating polls to boost engagement",
-      });
-    }
-
-    // Growth opportunities
+    // Posting frequency analysis
     if (stats.totalPosts < 10) {
-      insights.push({
+      fallbackInsights.push({
         category: "opportunity",
-        title: "Consistency Opportunity",
-        description:
-          "More consistent posting could significantly improve your reach",
+        title: "Build Content Library",
+        description: "More content needed for better performance analysis",
         metric: `${stats.totalPosts} posts`,
         impact: "medium",
         recommendation:
-          "Aim for 3-4 posts per week to build momentum and grow your audience",
+          "Aim for 3-4 posts per week to build momentum and improve AI insights",
       });
     }
 
-    return insights;
-  }, [stats, topPosts]);
+    return fallbackInsights;
+  }, [insights, stats, topPosts]);
 
   const openPostDialog = (post: any) => {
     setSelectedPost({
@@ -400,12 +547,12 @@ export function AnalyticsDashboard({
               {learningInsights.map((insight, index) => (
                 <div
                   key={index}
-                  className={`p-4 rounded-lg border ${
+                  className={`p-4 rounded-lg border-l-4 ${
                     insight.category === "working"
-                      ? "bg-green-50 border-green-200"
+                      ? "border-l-green-500 bg-green-50"
                       : insight.category === "improvement"
-                      ? "bg-yellow-50 border-yellow-200"
-                      : "bg-blue-50 border-blue-200"
+                      ? "border-l-red-500 bg-red-50"
+                      : "border-l-blue-500 bg-blue-50"
                   }`}
                 >
                   <div className="flex items-start justify-between mb-2">
@@ -413,58 +560,133 @@ export function AnalyticsDashboard({
                       {insight.category === "working" ? (
                         <CheckCircle className="h-4 w-4 text-green-600" />
                       ) : insight.category === "improvement" ? (
-                        <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                        <AlertTriangle className="h-4 w-4 text-red-600" />
                       ) : (
                         <Lightbulb className="h-4 w-4 text-blue-600" />
                       )}
-                      <span className="font-medium text-sm">
-                        {insight.category === "working"
-                          ? "✅ What is Working"
-                          : insight.category === "improvement"
-                          ? "⚠️ Needs Improvement"
-                          : "💡 Opportunity"}
-                      </span>
+                      <h4 className="font-semibold text-sm">{insight.title}</h4>
                     </div>
                     <Badge
-                      variant="outline"
-                      className={`text-xs ${
+                      variant={
                         insight.impact === "high"
-                          ? "border-red-300 text-red-700"
+                          ? "destructive"
                           : insight.impact === "medium"
-                          ? "border-yellow-300 text-yellow-700"
-                          : "border-green-300 text-green-700"
-                      }`}
+                          ? "default"
+                          : "secondary"
+                      }
+                      className="text-xs"
                     >
                       {insight.impact} impact
                     </Badge>
                   </div>
-                  <h4 className="font-semibold text-gray-900 mb-1">
-                    {insight.title}
-                  </h4>
                   <p className="text-sm text-gray-600 mb-2">
                     {insight.description}
                   </p>
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-medium text-gray-500">
-                      Metric: {insight.metric}
+                    <span className="text-lg font-bold text-gray-900">
+                      {insight.metric}
                     </span>
+                    <Badge variant="outline" className="text-xs">
+                      {insight.category === "working"
+                        ? "What's Working"
+                        : insight.category === "improvement"
+                        ? "Needs Work"
+                        : "Opportunity"}
+                    </Badge>
                   </div>
-                  <div className="mt-2 text-xs text-gray-700 bg-white p-2 rounded border">
-                    <strong>💡 Recommendation:</strong> {insight.recommendation}
+                  <div className="mt-3 p-3 bg-white rounded border">
+                    <div className="flex items-start gap-2">
+                      <Lightbulb className="h-4 w-4 text-yellow-600 mt-0.5" />
+                      <div>
+                        <p className="text-xs font-medium text-gray-700 mb-1">
+                          Recommendation:
+                        </p>
+                        <p className="text-xs text-gray-600">
+                          {insight.recommendation}
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 </div>
               ))}
             </div>
           ) : (
             <div className="text-center py-8">
-              <Brain className="h-12 w-12 mx-auto text-gray-400 mb-4" />
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                Learning in Progress
+              <Brain className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">
+                No AI Insights Available Yet
               </h3>
-              <p className="text-gray-600">
-                Add analytics to your posts to help our AI learn what content
-                works best for your audience
+              <p className="text-gray-600 mb-6 max-w-md mx-auto">
+                {stats.totalPosts === 0
+                  ? "Create and post some content to get personalized AI insights about what works best for your audience."
+                  : stats.totalPosts < 3
+                  ? "Keep posting content! We need at least 3 posts with performance data to generate meaningful insights."
+                  : "Generate AI insights to understand what content performs best for your audience."}
               </p>
+              <div className="space-y-4">
+                {stats.totalPosts >= 3 && (
+                  <Button
+                    onClick={() => setShowRegenerationModal(true)}
+                    disabled={regeneratingInsights}
+                    className="mr-4"
+                  >
+                    {regeneratingInsights ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                        Generating Insights...
+                      </>
+                    ) : (
+                      <>
+                        <Zap className="h-4 w-4 mr-2" />
+                        Generate AI Insights
+                      </>
+                    )}
+                  </Button>
+                )}
+                {stats.totalPosts === 0 && (
+                  <Alert>
+                    <BookOpen className="h-4 w-4" />
+                    <AlertDescription>
+                      Start by creating your first post in the{" "}
+                      <a
+                        href="/posts/create"
+                        className="font-medium text-blue-600 hover:underline"
+                      >
+                        Post Creator
+                      </a>{" "}
+                      to begin getting personalized insights.
+                    </AlertDescription>
+                  </Alert>
+                )}
+              </div>
+            </div>
+          )}
+
+          {learningInsights.length > 0 && (
+            <div className="mt-6 pt-4 border-t">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Zap className="h-4 w-4 text-blue-600" />
+                  <span className="text-sm font-medium">
+                    Want more personalized insights?
+                  </span>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowRegenerationModal(true)}
+                  disabled={regeneratingInsights}
+                >
+                  {regeneratingInsights ? (
+                    <>
+                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-600 mr-2"></div>
+                      Generating...
+                    </>
+                  ) : (
+                    "Regenerate Insights"
+                  )}
+                </Button>
+              </div>
             </div>
           )}
         </CardContent>

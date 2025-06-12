@@ -16,8 +16,10 @@ import {
   Calendar,
   MessageSquare,
   BookOpen,
+  Loader2,
   // BookOpen,
 } from "lucide-react";
+import { useState } from "react";
 
 interface SidebarProps {
   className?: string;
@@ -92,13 +94,27 @@ export function Sidebar({ className }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const { logout } = useSimpleAuth();
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const handleNavigation = (href: string) => {
     router.push(href);
   };
 
   const handleLogout = async () => {
-    await logout();
+    if (isLoggingOut) return; // Prevent double clicks
+
+    setIsLoggingOut(true);
+    try {
+      await logout();
+      // Force navigation after logout
+      window.location.href = "/login";
+    } catch (error) {
+      console.error("Logout error:", error);
+      // Still redirect even if there's an error
+      window.location.href = "/login";
+    } finally {
+      setIsLoggingOut(false);
+    }
   };
 
   return (
@@ -237,21 +253,31 @@ export function Sidebar({ className }: SidebarProps) {
             variant="ghost"
             className="w-full justify-start gap-3 h-12 px-4 text-sm font-medium rounded-lg transition-all duration-200 text-gray-500 hover:bg-red-50 hover:text-red-600"
             onClick={handleLogout}
+            disabled={isLoggingOut}
           >
-            <svg
-              className="h-5 w-5 text-gray-400 hover:text-red-500"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
-              />
-            </svg>
-            <span className="font-medium">Log out</span>
+            {isLoggingOut ? (
+              <>
+                <Loader2 className="h-5 w-5 animate-spin" />
+                <span className="font-medium">Logging out...</span>
+              </>
+            ) : (
+              <>
+                <svg
+                  className="h-5 w-5 text-gray-400 hover:text-red-500"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+                  />
+                </svg>
+                <span className="font-medium">Log out</span>
+              </>
+            )}
           </Button>
         </div>
       </div>

@@ -588,7 +588,7 @@ export function CreatePostContent({
                               Writing manually
                             </p>
                             <p className="text-xs text-green-700">
-                              You're writing this post from scratch. Take your
+                              You are writing this post from scratch. Take your
                               time and craft something authentic!
                             </p>
                           </div>
@@ -650,7 +650,7 @@ export function CreatePostContent({
                             Ready to create your post?
                           </p>
                           <p className="text-sm text-gray-600 mb-4">
-                            Choose how you'd like to create your content
+                            Choose how you would like to create your content
                           </p>
                           <div className="space-y-2 text-xs text-gray-500">
                             <p>

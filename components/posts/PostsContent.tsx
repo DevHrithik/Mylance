@@ -313,14 +313,46 @@ export function PostsContent({
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
+    // Check if it's a date-only string (YYYY-MM-DD)
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+      // For date-only strings, parse as local date to avoid timezone shifts
+      const [yearStr, monthStr, dayStr] = dateString.split("-");
+      const year = Number(yearStr);
+      const month = Number(monthStr);
+      const day = Number(dayStr);
+      if (
+        !isNaN(year) &&
+        !isNaN(month) &&
+        !isNaN(day) &&
+        yearStr &&
+        monthStr &&
+        dayStr
+      ) {
+        const date = new Date(year, month - 1, day); // month is 0-indexed
+        return date.toLocaleDateString("en-US", {
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+        });
+      } else {
+        return dateString; // fallback to raw string if invalid
+      }
+    } else {
+      // For ISO datetime strings, handle normally
+      const date = new Date(dateString);
+      return date.toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      });
+    }
   };
 
-  const getStatusBadge = (status: Post["status"], needsAnalytics?: boolean) => {
+  const getStatusBadge = (
+    status: Post["status"],
+    needsAnalytics?: boolean,
+    isScheduled?: boolean
+  ) => {
     const colors = statusColors[status];
     const className = `text-xs font-medium px-2 py-1 rounded-full border ${colors}`;
 
@@ -328,6 +360,14 @@ export function PostsContent({
       return (
         <Badge className="text-xs bg-red-50 text-red-700 border-red-200">
           📊 Needs Analytics
+        </Badge>
+      );
+    }
+
+    if (status === "draft" && isScheduled) {
+      return (
+        <Badge className="text-xs bg-blue-50 text-blue-700 border-blue-200">
+          📅 SCHEDULED
         </Badge>
       );
     }
@@ -508,41 +548,71 @@ export function PostsContent({
     if (!selectedPost) return;
 
     try {
-      const { error } = await supabase
+      setLoading(true);
+
+      let scheduleDate = null;
+
+      // Only process date if selectedDate has a value
+      if (selectedDate && selectedDate.trim()) {
+        try {
+          // Validate the date format (should be YYYY-MM-DD)
+          const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+          if (!dateRegex.test(selectedDate)) {
+            throw new Error("Invalid date format");
+          }
+
+          // For date-only fields, just use the YYYY-MM-DD format directly
+          scheduleDate = selectedDate;
+        } catch (dateError) {
+          console.error("Date conversion error:", dateError);
+          toast.error("Please enter a valid date");
+          return;
+        }
+      }
+
+      // ONLY update scheduled_date - DO NOT touch status or other fields
+      const updateData: { scheduled_date: string | null } = {
+        scheduled_date: scheduleDate,
+      };
+
+      const { error, data } = await supabase
         .from("posts")
-        .update({
-          scheduled_date: selectedDate || null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", selectedPost.id);
+        .update(updateData)
+        .eq("id", selectedPost.id)
+        .select("id, scheduled_date, status");
 
       if (error) throw error;
 
+      // Update local state with the exact value from database
       setData((prevData) => ({
         ...prevData,
         posts: prevData.posts.map((post) =>
           post.id === selectedPost.id
             ? {
                 ...post,
-                scheduled_date: selectedDate || null,
-                updated_at: new Date().toISOString(),
+                scheduled_date: scheduleDate,
+                // Explicitly preserve status to ensure it doesn't change
+                status: post.status,
               }
             : post
         ),
       }));
 
+      // Close dialog and reset state
       setDateEditDialogOpen(false);
       setSelectedPost(null);
       setSelectedDate("");
 
-      const message = selectedDate
-        ? `Post scheduled for ${formatDate(selectedDate)}`
+      const message = scheduleDate
+        ? `Post scheduled for ${formatDate(scheduleDate)}`
         : "Schedule removed from post";
       toast.success(message);
     } catch (error) {
-      console.error("Error updating schedule:", error);
-      toast.error("Failed to update schedule");
+      console.error("❌ Error updating schedule:", error);
+      toast.error("Failed to update schedule. Please try again.");
       handleAuthError(error);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -577,7 +647,11 @@ export function PostsContent({
 
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-2 flex-wrap">
-          {getStatusBadge(post.status, post.needsAnalytics)}
+          {getStatusBadge(
+            post.status,
+            post.needsAnalytics,
+            post.scheduled_date !== null
+          )}
           <Badge variant="outline" className="text-xs">
             {post.content_type || "Post"}
           </Badge>
@@ -754,7 +828,19 @@ export function PostsContent({
                   onClick={(e) => {
                     e.stopPropagation();
                     setSelectedPost(post);
-                    setSelectedDate(post.scheduled_date?.split("T")[0] || "");
+                    // If it's already in YYYY-MM-DD format, use it directly
+                    if (
+                      post.scheduled_date &&
+                      /^\d{4}-\d{2}-\d{2}$/.test(post.scheduled_date)
+                    ) {
+                      setSelectedDate(post.scheduled_date);
+                    } else if (post.scheduled_date) {
+                      // Convert ISO datetime to YYYY-MM-DD format
+                      const dateOnly = post.scheduled_date.split("T")[0] ?? "";
+                      setSelectedDate(dateOnly);
+                    } else {
+                      setSelectedDate("");
+                    }
                     setDateEditDialogOpen(true);
                   }}
                 >
@@ -1089,39 +1175,78 @@ export function PostsContent({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={dateEditDialogOpen} onOpenChange={setDateEditDialogOpen}>
+      <Dialog
+        open={dateEditDialogOpen}
+        onOpenChange={(open) => {
+          setDateEditDialogOpen(open);
+          if (!open) {
+            setSelectedPost(null);
+            setSelectedDate("");
+          }
+        }}
+        key={selectedPost?.id}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
               {selectedPost?.scheduled_date ? "Edit Schedule" : "Schedule Post"}
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="schedule-date">Scheduled Date</Label>
-              <Input
-                id="schedule-date"
-                type="date"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                placeholder="Select a date to schedule this post"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Leave empty to remove the schedule
-              </p>
+          <form onSubmit={(e) => e.preventDefault()}>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="schedule-date">Scheduled Date</Label>
+                <Input
+                  id="schedule-date"
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  placeholder="Select a date to schedule this post"
+                  disabled={loading}
+                  className="w-full"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Leave empty to remove the schedule
+                </p>
+              </div>
+              <div className="flex justify-end space-x-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setDateEditDialogOpen(false);
+                    setSelectedPost(null);
+                    setSelectedDate("");
+                  }}
+                  disabled={loading}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleSaveDate();
+                  }}
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Saving...
+                    </>
+                  ) : selectedDate ? (
+                    "Save Schedule"
+                  ) : (
+                    "Remove Schedule"
+                  )}
+                </Button>
+              </div>
             </div>
-            <div className="flex justify-end space-x-2">
-              <Button
-                variant="outline"
-                onClick={() => setDateEditDialogOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button onClick={handleSaveDate}>
-                {selectedDate ? "Save Schedule" : "Remove Schedule"}
-              </Button>
-            </div>
-          </div>
+          </form>
         </DialogContent>
       </Dialog>
     </div>

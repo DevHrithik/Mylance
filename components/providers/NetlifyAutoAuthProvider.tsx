@@ -102,10 +102,10 @@ export function NetlifyAutoAuthProvider({
 
     console.log("NetlifyAutoAuthProvider: Initializing...");
 
-    // Subscribe to auth state changes with debouncing
+    // Subscribe to auth state changes with minimal debouncing
     let updateTimeout: NodeJS.Timeout;
     const unsubscribe = netlifyAutoAuth.subscribe((state) => {
-      // Debounce rapid state updates to prevent unnecessary re-renders
+      // Minimal debounce to prevent excessive re-renders
       clearTimeout(updateTimeout);
       updateTimeout = setTimeout(() => {
         console.log("NetlifyAutoAuthProvider: Auth state updated:", {
@@ -127,18 +127,33 @@ export function NetlifyAutoAuthProvider({
             handleAutoRedirect(state);
           }
         }
-      }, 50); // 50ms debounce
+      }, 10); // Reduced from 50ms to 10ms for faster response
     });
 
     // Start auth initialization with timeout
-    netlifyAutoAuth.initialize().catch((error) => {
-      console.error("NetlifyAutoAuthProvider: Initialization failed:", error);
-    });
+    const initTimeout = setTimeout(() => {
+      console.warn(
+        "NetlifyAutoAuthProvider: Initialization taking too long, forcing completion"
+      );
+      if (!isInitialized) {
+        setIsInitialized(true);
+      }
+    }, 5000); // 5 second max timeout
+
+    netlifyAutoAuth
+      .initialize()
+      .catch((error) => {
+        console.error("NetlifyAutoAuthProvider: Initialization failed:", error);
+      })
+      .finally(() => {
+        clearTimeout(initTimeout);
+      });
 
     return () => {
       unsubscribe();
       initializationStarted.current = false;
       clearTimeout(updateTimeout);
+      clearTimeout(initTimeout);
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
   }, []); // Remove dependencies to prevent re-initialization
@@ -164,32 +179,29 @@ export function NetlifyAutoAuthProvider({
     login: async (email: string, password: string) => {
       const result = await netlifyAutoAuth.login(email, password);
       if (result.success && enableAutoRedirect) {
-        // Delay redirect slightly to allow state to update
-        setTimeout(() => {
-          const redirectPath = netlifyAutoAuth.autoRedirect();
-          if (redirectPath) {
-            router.push(redirectPath);
-          }
-        }, 100);
+        // Immediate redirect without delay for better UX
+        const redirectPath = netlifyAutoAuth.autoRedirect();
+        if (redirectPath) {
+          router.replace(redirectPath); // Use replace instead of push
+        }
       }
       return result;
     },
     signup: async (email: string, password: string) => {
       const result = await netlifyAutoAuth.signup(email, password);
       if (result.success && enableAutoRedirect) {
-        // Delay redirect slightly to allow state to update
-        setTimeout(() => {
-          const redirectPath = netlifyAutoAuth.autoRedirect();
-          if (redirectPath) {
-            router.push(redirectPath);
-          }
-        }, 100);
+        // Immediate redirect without delay for better UX
+        const redirectPath = netlifyAutoAuth.autoRedirect();
+        if (redirectPath) {
+          router.replace(redirectPath); // Use replace instead of push
+        }
       }
       return result;
     },
     logout: async () => {
       await netlifyAutoAuth.logout();
-      router.push("/login");
+      // Force navigation to ensure logout redirect works
+      window.location.href = "/login";
     },
     refresh: async () => {
       await netlifyAutoAuth.refresh();
@@ -199,6 +211,16 @@ export function NetlifyAutoAuthProvider({
 
   // Show loading screen during initial auth check
   if (showLoadingScreen && !isInitialized && authState.isLoading) {
+    // Add timeout to prevent infinite loading
+    setTimeout(() => {
+      if (!isInitialized) {
+        console.warn(
+          "NetlifyAutoAuthProvider: Force completing initialization due to timeout"
+        );
+        setIsInitialized(true);
+      }
+    }, 6000); // 6 second timeout for loading screen
+
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">

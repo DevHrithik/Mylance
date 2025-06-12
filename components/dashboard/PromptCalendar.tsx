@@ -620,14 +620,14 @@ export function PromptCalendar({
                   {/* First Prompt */}
                   {day.prompts[0] ? (
                     <PromptCard prompt={day.prompts[0]} index={0} />
-                  ) : (
+                            ) : (
                     <EmptyPromptCard slotText="for this slot" />
                   )}
 
                   {/* Second Prompt */}
                   {day.prompts[1] ? (
                     <PromptCard prompt={day.prompts[1]} index={1} />
-                  ) : (
+                            ) : (
                     <EmptyPromptCard slotText="for the day" />
                   )}
                 </div>

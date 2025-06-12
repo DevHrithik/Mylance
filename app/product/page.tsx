@@ -68,12 +68,16 @@ export default function ProductPage() {
     }
   };
 
-  // Temporarily disable auto-redirect to dashboard to prevent errors
-  // useEffect(() => {
-  //   if (!subscriptionLoading && (hasAccess || isAdmin)) {
-  //     router.push("/dashboard");
-  //   }
-  // }, [hasAccess, isAdmin, subscriptionLoading, router]);
+  // Auto-redirect to dashboard after successful payment
+  useEffect(() => {
+    if (
+      paymentStatus === "success" &&
+      (hasAccess || isAdmin) &&
+      !subscriptionLoading
+    ) {
+      router.replace("/dashboard");
+    }
+  }, [paymentStatus, hasAccess, isAdmin, subscriptionLoading, router]);
 
   if (subscriptionLoading) {
     return (
@@ -91,7 +95,7 @@ export default function ProductPage() {
     return (
       <div className="min-h-screen flex items-center justify-center p-6">
         <div className="text-center max-w-md">
-          <h2 className="text-2xl font-bold mb-4">You're All Set!</h2>
+          <h2 className="text-2xl font-bold mb-4">You are All Set!</h2>
           <p className="text-gray-600 mb-6">
             {isAdmin
               ? "You have admin access to Mylance."

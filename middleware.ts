@@ -225,9 +225,24 @@ export async function middleware(request: NextRequest) {
     const isAdmin = profile.is_admin || false;
     const hasCompletedOnboarding = profile.onboarding_completed || false;
 
+    // Fetch subscription status if onboarding is complete and not admin
+    let hasActiveSubscription = false;
+    if (hasCompletedOnboarding && !isAdmin) {
+      const { data: subscription } = await supabase
+        .from("subscriptions")
+        .select("status, plan_type")
+        .eq("user_id", user.id)
+        .single();
+      hasActiveSubscription = !!(
+        subscription &&
+        subscription.status === "active" &&
+        subscription.plan_type === "monthly"
+      );
+    }
+
     // AUTO-LOGIN LOGIC STARTS HERE
     console.log(
-      `Middleware: User ${user.email} authenticated - isAdmin: ${isAdmin}, onboardingCompleted: ${hasCompletedOnboarding}`
+      `Middleware: User ${user.email} authenticated - isAdmin: ${isAdmin}, onboardingCompleted: ${hasCompletedOnboarding}, hasActiveSubscription: ${hasActiveSubscription}`
     );
 
     // Handle admin routes
@@ -298,7 +313,34 @@ export async function middleware(request: NextRequest) {
 
     // Allow access to product page for payment after onboarding
     if (pathname.startsWith("/product")) {
+      if (!hasCompletedOnboarding) {
+        // If onboarding not complete, redirect to onboarding
+        const url = request.nextUrl.clone();
+        url.pathname = "/onboarding";
+        return createRedirectResponse(url, request);
+      }
       return supabaseResponse;
+    }
+
+    // If onboarding is complete but no active subscription, force user to /product for all dashboard/protected routes
+    if (
+      hasCompletedOnboarding &&
+      !isAdmin &&
+      !hasActiveSubscription &&
+      (pathname.startsWith("/dashboard") ||
+        pathname.startsWith("/analytics") ||
+        pathname.startsWith("/billing") ||
+        pathname.startsWith("/profile") ||
+        pathname.startsWith("/settings") ||
+        pathname.startsWith("/feedback") ||
+        pathname.startsWith("/content-calendar") ||
+        pathname.startsWith("/prompt-library") ||
+        pathname.startsWith("/resources") ||
+        pathname.startsWith("/posts"))
+    ) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/product";
+      return createRedirectResponse(url, request);
     }
 
     // AUTO-REDIRECT: Incomplete onboarding to onboarding page

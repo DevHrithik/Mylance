@@ -55,51 +55,51 @@ export const getDashboardData = unstable_cache(
     const supabase = createServiceClient();
 
     try {
-    // Use our optimized database function
-    const { data, error } = await supabase.rpc("get_dashboard_stats", {
-      p_user_id: userId,
-    });
+      // Use our optimized database function
+      const { data, error } = await supabase.rpc("get_dashboard_stats", {
+        p_user_id: userId,
+      });
 
-    if (error) {
-      console.error("Dashboard data fetch error:", error);
+      if (error) {
+        console.error("Dashboard data fetch error:", error);
 
         // If the database function fails, fallback to manual queries
         console.log("Falling back to manual queries...");
         return await getFallbackDashboardData(userId);
-    }
+      }
 
-    if (!data || data.length === 0) {
-      // Return empty data structure if no results
+      if (!data || data.length === 0) {
+        // Return empty data structure if no results
+        return {
+          stats: {
+            completedPosts: 0,
+            availablePrompts: 0,
+            totalPosts: 0,
+            completionRate: 0,
+          },
+          recentPosts: [],
+          upcomingPrompts: [],
+          userPreferences: {},
+        };
+      }
+
+      const result = data[0];
+      const completionRate =
+        result.total_posts > 0
+          ? Math.round((result.completed_posts / result.total_posts) * 100)
+          : 0;
+
       return {
         stats: {
-          completedPosts: 0,
-          availablePrompts: 0,
-          totalPosts: 0,
-          completionRate: 0,
+          completedPosts: result.completed_posts || 0,
+          availablePrompts: result.available_prompts || 0,
+          totalPosts: result.total_posts || 0,
+          completionRate,
         },
-        recentPosts: [],
-        upcomingPrompts: [],
-        userPreferences: {},
+        recentPosts: result.recent_posts || [],
+        upcomingPrompts: result.upcoming_prompts || [],
+        userPreferences: result.user_preferences || {},
       };
-    }
-
-    const result = data[0];
-    const completionRate =
-      result.total_posts > 0
-        ? Math.round((result.completed_posts / result.total_posts) * 100)
-        : 0;
-
-    return {
-      stats: {
-        completedPosts: result.completed_posts || 0,
-        availablePrompts: result.available_prompts || 0,
-        totalPosts: result.total_posts || 0,
-        completionRate,
-      },
-      recentPosts: result.recent_posts || [],
-      upcomingPrompts: result.upcoming_prompts || [],
-      userPreferences: result.user_preferences || {},
-    };
     } catch (err: any) {
       console.error("Dashboard data fetch failed:", err);
       // Fallback to manual queries if database function fails
@@ -392,17 +392,19 @@ export const getAnalyticsData = unstable_cache(
             .select(
               `
             post_id, impressions, likes, comments, shares, engagement_rate,
-            posts!inner(user_id, title, content_type, posted_at)
+            posts!inner(user_id, title, content, content_type, posted_at)
           `
             )
             .eq("posts.user_id", userId)
             .order("recorded_at", { ascending: false }),
 
+          // Fetch real AI insights from the database
           supabase
-            .from("ai_learning_insights")
+            .from("ai_insights")
             .select("*")
             .eq("user_id", userId)
-            .single(),
+            .eq("is_active", true)
+            .order("confidence_score", { ascending: false }),
         ]);
 
       if (postsResponse.error) {
@@ -411,7 +413,7 @@ export const getAnalyticsData = unstable_cache(
 
       const posts = postsResponse.data || [];
       const performanceData = performanceResponse.data || [];
-      const aiInsights = insightsResponse.data;
+      const aiInsights = insightsResponse.data || [];
 
       // Calculate stats from performance data
       const totalPosts = posts.length;
@@ -450,6 +452,7 @@ export const getAnalyticsData = unstable_cache(
         .map((perf: any) => ({
           id: perf.post_id,
           title: perf.posts?.title || "Untitled",
+          content: perf.posts?.content || "",
           content_type: perf.posts?.content_type || "post",
           posted_at: perf.posts?.posted_at,
           impressions: perf.impressions,
@@ -459,35 +462,117 @@ export const getAnalyticsData = unstable_cache(
           engagement_rate: Number(perf.engagement_rate),
         }));
 
-      // Create insights data
-      const insights = aiInsights
-        ? [
-            {
-              id: aiInsights.id,
-              insight_type: "ai_learning",
-              insight_data: {
-                total_edits: aiInsights.total_edits,
-                improvement_score: Number(aiInsights.improvement_score),
-                personalization_level: Number(aiInsights.personalization_level),
-                learning_velocity: Number(aiInsights.learning_velocity),
-                confidence_score: Number(aiInsights.confidence_score),
-              },
-              confidence_score: Number(aiInsights.confidence_score),
-              performance_impact: Number(aiInsights.improvement_score),
-              recommendations: [
-                aiInsights.improvement_score > 0.7
-                  ? "Your AI learning is performing well!"
-                  : "Continue providing feedback to improve AI personalization",
-                aiInsights.personalization_level > 0.5
-                  ? "High personalization achieved"
-                  : "More content needed for better personalization",
-              ],
-              is_active: true,
-              created_at: aiInsights.created_at,
-              updated_at: aiInsights.updated_at,
+      // Transform real AI insights from database
+      const insights = aiInsights.map((insight: any) => ({
+        id: insight.id,
+        insight_type: insight.insight_type,
+        insight_data: insight.insight_data,
+        confidence_score: Number(insight.confidence_score),
+        performance_impact: Number(insight.performance_impact),
+        recommendations: insight.recommendations,
+        is_active: insight.is_active,
+        created_at: insight.created_at,
+        updated_at: insight.updated_at,
+      }));
+
+      // If no insights exist, generate some based on the data we have
+      if (insights.length === 0 && performanceData.length > 0) {
+        console.log("No insights found, generating basic content analysis...");
+
+        // Analyze content types
+        const contentTypeAnalysis = performanceData.reduce((acc: any, perf) => {
+          const type = (perf.posts as any)?.content_type || "general";
+          if (!acc[type]) {
+            acc[type] = { count: 0, totalEngagement: 0, totalImpressions: 0 };
+          }
+          acc[type].count++;
+          acc[type].totalEngagement += Number(perf.engagement_rate) || 0;
+          acc[type].totalImpressions += perf.impressions || 0;
+          return acc;
+        }, {});
+
+        const bestContentType = Object.entries(contentTypeAnalysis).reduce(
+          (best: any, [type, data]: any) => {
+            const avgEngagement = data.totalEngagement / data.count;
+            return !best || avgEngagement > best.avgEngagement
+              ? {
+                  type,
+                  avgEngagement,
+                  count: data.count,
+                  impressions: data.totalImpressions,
+                }
+              : best;
+          },
+          null
+        );
+
+        // Generate insights based on actual data
+        if (bestContentType && bestContentType.count >= 2) {
+          insights.push({
+            id: Date.now(),
+            insight_type: "content_performance",
+            insight_data: {
+              best_content_type: bestContentType.type,
+              avg_engagement: bestContentType.avgEngagement.toFixed(1),
+              post_count: bestContentType.count,
+              total_impressions: bestContentType.impressions,
             },
-          ]
-        : [];
+            confidence_score: 0.85,
+            performance_impact: bestContentType.avgEngagement * 5,
+            recommendations: [
+              `Your ${
+                bestContentType.type
+              } content performs best with ${bestContentType.avgEngagement.toFixed(
+                1
+              )}% engagement`,
+              `Create more ${bestContentType.type} content - you have ${bestContentType.count} high-performing posts`,
+              `Focus on ${bestContentType.type} formats to maximize reach and engagement`,
+            ],
+            is_active: true,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          });
+        }
+
+        // Engagement depth analysis
+        const totalEngagements = totalLikes + totalComments + totalShares;
+        const commentRatio =
+          totalImpressions > 0 ? (totalComments / totalImpressions) * 100 : 0;
+        const likeRatio =
+          totalImpressions > 0 ? (totalLikes / totalImpressions) * 100 : 0;
+
+        if (totalImpressions > 0) {
+          insights.push({
+            id: Date.now() + 1,
+            insight_type: "engagement_analysis",
+            insight_data: {
+              comment_rate: commentRatio.toFixed(2),
+              like_rate: likeRatio.toFixed(2),
+              total_engagements: totalEngagements,
+              engagement_depth:
+                commentRatio < likeRatio * 0.15 ? "shallow" : "good",
+            },
+            confidence_score: 0.78,
+            performance_impact: commentRatio < likeRatio * 0.15 ? 20 : 10,
+            recommendations:
+              commentRatio < likeRatio * 0.15
+                ? [
+                    "Ask direct questions in your posts to encourage comments",
+                    "Share personal experiences to spark conversations",
+                    "Create controversial but thoughtful takes to drive discussion",
+                    "Always respond to comments to build community engagement",
+                  ]
+                : [
+                    "Great comment engagement! Keep asking questions",
+                    "Your audience loves interacting - maintain this approach",
+                    "Consider creating more discussion-based content",
+                  ],
+            is_active: true,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          });
+        }
+      }
 
       return {
         stats: {

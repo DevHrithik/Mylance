@@ -266,15 +266,15 @@ export function PromptLibrary({
           {/* Title */}
           <div className="min-h-0">
             <h3 className="font-semibold text-gray-900 leading-tight text-sm break-words">
-              {prompt.title}
-            </h3>
+            {prompt.title}
+          </h3>
           </div>
 
           {/* Hook */}
           <div className="min-h-0">
             <p className="text-gray-600 text-xs leading-relaxed break-words">
               <span className="font-medium">Hook:</span> {prompt.hook}
-            </p>
+          </p>
           </div>
 
           {/* Theme and Scheduled Date */}
@@ -299,25 +299,25 @@ export function PromptLibrary({
                 </span>
               ))}
             </div>
-          </div>
+            </div>
 
-          {/* Feedback Section */}
-          <div
+            {/* Feedback Section */}
+            <div
             className="flex items-center justify-between pt-3 border-t border-gray-100 mt-auto"
-            onClick={(e) => e.stopPropagation()} // Prevent card click
-          >
-            <QuickRating type="prompt" targetId={parseInt(prompt.id)} />
-            <FeedbackButton
-              type="prompt"
-              targetId={parseInt(prompt.id)}
-              title={prompt.title}
-              content={prompt.hook}
-              variant="ghost"
-              size="sm"
-              className="text-xs h-7 px-3"
+              onClick={(e) => e.stopPropagation()} // Prevent card click
             >
-              Feedback
-            </FeedbackButton>
+              <QuickRating type="prompt" targetId={parseInt(prompt.id)} />
+              <FeedbackButton
+                type="prompt"
+                targetId={parseInt(prompt.id)}
+                title={prompt.title}
+                content={prompt.hook}
+                variant="ghost"
+                size="sm"
+              className="text-xs h-7 px-3"
+              >
+                Feedback
+              </FeedbackButton>
           </div>
         </div>
       </CardContent>
@@ -377,57 +377,57 @@ export function PromptLibrary({
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <Select value={selectedType} onValueChange={setSelectedType}>
-              <SelectTrigger className="w-[140px]">
-                <SelectValue placeholder="All Types" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Types</SelectItem>
-                <SelectItem value="educational">Educational</SelectItem>
-                <SelectItem value="story">Story</SelectItem>
-                <SelectItem value="question">Question</SelectItem>
-                <SelectItem value="promotional">Promotional</SelectItem>
-                <SelectItem value="personal">Personal</SelectItem>
-              </SelectContent>
-            </Select>
+          <Select value={selectedType} onValueChange={setSelectedType}>
+            <SelectTrigger className="w-[140px]">
+              <SelectValue placeholder="All Types" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Types</SelectItem>
+              <SelectItem value="educational">Educational</SelectItem>
+              <SelectItem value="story">Story</SelectItem>
+              <SelectItem value="question">Question</SelectItem>
+              <SelectItem value="promotional">Promotional</SelectItem>
+              <SelectItem value="personal">Personal</SelectItem>
+            </SelectContent>
+          </Select>
 
-            <Select value={selectedTheme} onValueChange={setSelectedTheme}>
-              <SelectTrigger className="w-[140px]">
-                <SelectValue placeholder="All Themes" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Themes</SelectItem>
-                {uniqueThemes.map((theme) => (
-                  <SelectItem key={theme} value={theme}>
-                    {theme.length > 30 ? theme.substring(0, 30) + "..." : theme}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <Select value={selectedTheme} onValueChange={setSelectedTheme}>
+            <SelectTrigger className="w-[140px]">
+              <SelectValue placeholder="All Themes" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Themes</SelectItem>
+              {uniqueThemes.map((theme) => (
+                <SelectItem key={theme} value={theme}>
+                  {theme.length > 30 ? theme.substring(0, 30) + "..." : theme}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
-            <div className="flex items-center space-x-2 bg-gray-100 rounded-lg p-1">
-              <Button
-                variant={!showUsedPrompts ? "default" : "ghost"}
-                size="sm"
-                onClick={() => setShowUsedPrompts(false)}
+          <div className="flex items-center space-x-2 bg-gray-100 rounded-lg p-1">
+            <Button
+              variant={!showUsedPrompts ? "default" : "ghost"}
+              size="sm"
+              onClick={() => setShowUsedPrompts(false)}
                 className="flex items-center space-x-2 text-xs px-3"
-              >
-                <span>Available</span>
-                <span className="text-xs opacity-75">
-                  ({displayPrompts.filter((p) => !p.isUsed).length})
-                </span>
-              </Button>
-              <Button
-                variant={showUsedPrompts ? "default" : "ghost"}
-                size="sm"
-                onClick={() => setShowUsedPrompts(true)}
+            >
+              <span>Available</span>
+              <span className="text-xs opacity-75">
+                ({displayPrompts.filter((p) => !p.isUsed).length})
+              </span>
+            </Button>
+            <Button
+              variant={showUsedPrompts ? "default" : "ghost"}
+              size="sm"
+              onClick={() => setShowUsedPrompts(true)}
                 className="flex items-center space-x-2 text-xs px-3"
-              >
-                <span>Used</span>
-                <span className="text-xs opacity-75">
-                  ({displayPrompts.filter((p) => p.isUsed).length})
-                </span>
-              </Button>
+            >
+              <span>Used</span>
+              <span className="text-xs opacity-75">
+                ({displayPrompts.filter((p) => p.isUsed).length})
+              </span>
+            </Button>
             </div>
           </div>
         </div>

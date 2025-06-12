@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { useState } from "react";
 
 interface AdminSidebarProps {
   adminUser: AdminUser;
@@ -35,6 +36,7 @@ export default function AdminSidebar({
 }: AdminSidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const handleNavigation = (href: string) => {
     router.push(href);
@@ -42,14 +44,20 @@ export default function AdminSidebar({
   };
 
   const handleLogout = async () => {
+    if (isLoggingOut) return; // Prevent double clicks
+
+    setIsLoggingOut(true);
     try {
       const supabase = createClient();
       await supabase.auth.signOut();
-      router.push("/login");
+      // Force navigation after logout
+      window.location.href = "/login";
     } catch (error) {
       console.error("Error logging out:", error);
       // Still redirect even if there's an error
-      router.push("/login");
+      window.location.href = "/login";
+    } finally {
+      setIsLoggingOut(false);
     }
   };
 
@@ -122,9 +130,19 @@ export default function AdminSidebar({
                 variant="ghost"
                 className="w-full justify-start gap-3 h-12 px-4 text-sm font-medium rounded-lg transition-all duration-200 text-gray-500 hover:bg-red-50 hover:text-red-600"
                 onClick={handleLogout}
+                disabled={isLoggingOut}
               >
-                <LogOut className="h-5 w-5 text-gray-400 hover:text-red-500" />
-                <span className="font-medium">Log out</span>
+                {isLoggingOut ? (
+                  <>
+                    <div className="h-5 w-5 animate-spin rounded-full border-2 border-gray-300 border-t-red-500" />
+                    <span className="font-medium">Logging out...</span>
+                  </>
+                ) : (
+                  <>
+                    <LogOut className="h-5 w-5 text-gray-400 hover:text-red-500" />
+                    <span className="font-medium">Log out</span>
+                  </>
+                )}
               </Button>
             </div>
           </div>
@@ -236,9 +254,19 @@ export default function AdminSidebar({
                   variant="ghost"
                   className="w-full justify-start gap-3 h-12 px-4 text-sm font-medium rounded-lg transition-all duration-200 text-gray-500 hover:bg-red-50 hover:text-red-600"
                   onClick={handleLogout}
+                  disabled={isLoggingOut}
                 >
-                  <LogOut className="h-5 w-5 text-gray-400 hover:text-red-500" />
-                  <span className="font-medium">Log out</span>
+                  {isLoggingOut ? (
+                    <>
+                      <div className="h-5 w-5 animate-spin rounded-full border-2 border-gray-300 border-t-red-500" />
+                      <span className="font-medium">Logging out...</span>
+                    </>
+                  ) : (
+                    <>
+                      <LogOut className="h-5 w-5 text-gray-400 hover:text-red-500" />
+                      <span className="font-medium">Log out</span>
+                    </>
+                  )}
                 </Button>
               </div>
 

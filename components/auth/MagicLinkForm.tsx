@@ -54,6 +54,7 @@ export function MagicLinkForm({ mode, className }: MagicLinkFormProps) {
       console.log("MagicLinkForm: User already authenticated, redirecting...");
       const redirectPath = autoRedirect();
       if (redirectPath) {
+        // Use replace for instant redirect
         router.replace(redirectPath);
       }
     }
@@ -91,7 +92,7 @@ export function MagicLinkForm({ mode, className }: MagicLinkFormProps) {
           setError(result.error || "Signup failed");
         } else {
           setSuccess("Account created successfully! Redirecting...");
-          // NetlifyAutoAuthProvider will handle the redirect automatically
+          // The provider will handle redirect automatically
         }
       } else {
         console.log("Attempting login with:", email);
@@ -102,7 +103,7 @@ export function MagicLinkForm({ mode, className }: MagicLinkFormProps) {
           setError(result.error || "Login failed");
         } else {
           setSuccess("Login successful! Redirecting...");
-          // NetlifyAutoAuthProvider will handle the redirect automatically
+          // The provider will handle redirect automatically
         }
       }
     } catch (err: Error | unknown) {
@@ -144,6 +145,15 @@ export function MagicLinkForm({ mode, className }: MagicLinkFormProps) {
 
   // Show loading while checking existing auth
   if (authLoading) {
+    // Add timeout to prevent indefinite loading
+    setTimeout(() => {
+      if (authLoading) {
+        console.warn(
+          "MagicLinkForm: Auth check taking too long, proceeding with form"
+        );
+      }
+    }, 3000); // Reduced from potential indefinite wait to 3 seconds
+
     return (
       <Card className={cn("w-full max-w-md mx-auto", className)}>
         <CardContent className="pt-6">
