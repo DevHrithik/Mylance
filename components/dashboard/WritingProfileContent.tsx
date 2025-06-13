@@ -113,11 +113,64 @@ export function WritingProfileContent({
 }: WritingProfileContentProps) {
   const [saving, setSaving] = useState(false);
   const [editMode, setEditMode] = useState(false);
+  // Parse initial data JSON fields
+  const parseUserPreferences = (
+    prefs: UserPreferences | null
+  ): UserPreferences | null => {
+    if (!prefs) return null;
+    return {
+      ...prefs,
+      frequently_used_words:
+        typeof prefs.frequently_used_words === "string"
+          ? JSON.parse(prefs.frequently_used_words || "[]")
+          : prefs.frequently_used_words || [],
+      industry_jargon:
+        typeof prefs.industry_jargon === "string"
+          ? JSON.parse(prefs.industry_jargon || "[]")
+          : prefs.industry_jargon || [],
+      signature_expressions:
+        typeof prefs.signature_expressions === "string"
+          ? JSON.parse(prefs.signature_expressions || "[]")
+          : prefs.signature_expressions || [],
+    };
+  };
+
   const [preferences, setPreferences] = useState<UserPreferences | null>(
-    initialData.preferences
+    parseUserPreferences(initialData.preferences)
   );
   const [localPreferences, setLocalPreferences] =
-    useState<UserPreferences | null>(initialData.preferences);
+    useState<UserPreferences | null>(
+      parseUserPreferences(initialData.preferences)
+    );
+
+  // Wrap setters with debugging
+  const debugSetPreferences = (value: any) => {
+    console.log(
+      `📝 [${new Date().toISOString()}] setPreferences called with:`,
+      {
+        frequently_used_words:
+          typeof value === "function"
+            ? "function"
+            : value?.frequently_used_words,
+        caller: new Error().stack?.split("\n")[2]?.trim(),
+      }
+    );
+    setPreferences(value);
+  };
+
+  const debugSetLocalPreferences = (value: any) => {
+    console.log(
+      `📝 [${new Date().toISOString()}] setLocalPreferences called with:`,
+      {
+        frequently_used_words:
+          typeof value === "function"
+            ? "function"
+            : value?.frequently_used_words,
+        caller: new Error().stack?.split("\n")[2]?.trim(),
+      }
+    );
+    setLocalPreferences(value);
+  };
   const [newSamplePost, setNewSamplePost] = useState("");
   const [analyzingPost, setAnalyzingPost] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(
@@ -154,8 +207,51 @@ export function WritingProfileContent({
 
       if (data) {
         console.log("Fetched data sample_posts:", data.sample_posts);
-        setPreferences(data);
-        setLocalPreferences(data);
+
+        // Parse JSON fields from database with better error handling
+        console.log("🔍 Raw database data:", {
+          frequently_used_words: data.frequently_used_words,
+          industry_jargon: data.industry_jargon,
+          signature_expressions: data.signature_expressions,
+        });
+
+        const parseJsonField = (field: any, fieldName: string): any[] => {
+          try {
+            if (Array.isArray(field)) {
+              console.log(`✅ ${fieldName} is already array:`, field);
+              return field;
+            }
+            if (typeof field === "string" && field.trim()) {
+              const parsed = JSON.parse(field);
+              console.log(`✅ ${fieldName} parsed from JSON:`, parsed);
+              return Array.isArray(parsed) ? parsed : [];
+            }
+            console.log(`⚠️ ${fieldName} defaulting to empty array`);
+            return [];
+          } catch (e) {
+            console.error(`❌ Failed to parse ${fieldName}:`, e);
+            return [];
+          }
+        };
+
+        const parsedData = {
+          ...data,
+          frequently_used_words: parseJsonField(
+            data.frequently_used_words,
+            "frequently_used_words"
+          ),
+          industry_jargon: parseJsonField(
+            data.industry_jargon,
+            "industry_jargon"
+          ),
+          signature_expressions: parseJsonField(
+            data.signature_expressions,
+            "signature_expressions"
+          ),
+        };
+
+        debugSetPreferences(parsedData);
+        debugSetLocalPreferences(parsedData);
         setShowCreateModal(false);
       }
     } catch (error) {
@@ -166,11 +262,106 @@ export function WritingProfileContent({
   // Update local state when preferences change - simple sync
   useEffect(() => {
     if (preferences) {
-      setLocalPreferences(preferences);
+      // Parse JSON fields when syncing with better error handling
+      const parseJsonField = (field: any, fieldName: string): any[] => {
+        try {
+          if (Array.isArray(field)) return field;
+          if (typeof field === "string" && field.trim()) {
+            const parsed = JSON.parse(field);
+            return Array.isArray(parsed) ? parsed : [];
+          }
+          return [];
+        } catch (e) {
+          console.error(`Failed to parse ${fieldName}:`, e);
+          return [];
+        }
+      };
+
+      const parsedPreferences = {
+        ...preferences,
+        frequently_used_words: parseJsonField(
+          preferences.frequently_used_words,
+          "frequently_used_words"
+        ),
+        industry_jargon: parseJsonField(
+          preferences.industry_jargon,
+          "industry_jargon"
+        ),
+        signature_expressions: parseJsonField(
+          preferences.signature_expressions,
+          "signature_expressions"
+        ),
+      };
+      debugSetLocalPreferences(parsedPreferences);
     }
   }, [preferences]);
 
+  // Auto-analyze existing sample posts on component mount
+  useEffect(() => {
+    const autoAnalyzeExistingPosts = async () => {
+      if (
+        preferences &&
+        preferences.sample_posts &&
+        preferences.sample_posts.length > 0
+      ) {
+        // Check if profile data is missing (indicating no analysis has been done)
+        const hasProfileData =
+          preferences.frequently_used_words &&
+          preferences.frequently_used_words.length > 0;
+
+        if (!hasProfileData) {
+          console.log("🔍 Auto-analyzing existing sample posts...");
+          toast.info(
+            "Analyzing your existing posts to auto-fill your profile...",
+            {
+              duration: 3000,
+            }
+          );
+
+          try {
+            await analyzeWritingStyle(preferences.sample_posts);
+
+            // Save the analyzed data to database
+            setTimeout(async () => {
+              if (localPreferences) {
+                await handleSave();
+                toast.success(
+                  "✨ Profile auto-filled from your existing posts!",
+                  {
+                    duration: 4000,
+                  }
+                );
+              }
+            }, 500);
+          } catch (error) {
+            console.error("Auto-analysis failed:", error);
+            toast.error(
+              "Auto-analysis failed, but you can still add posts manually"
+            );
+          }
+        }
+      }
+    };
+
+    // Only run once when component mounts and preferences are loaded
+    if (preferences && !showCreateModal) {
+      autoAnalyzeExistingPosts();
+    }
+  }, [preferences?.id]); // Only depend on preferences.id to avoid re-running
+
   const currentPreferences = editMode ? localPreferences : preferences;
+
+  // Debug current preferences for UI with timestamps
+  console.log(`🎯 [${new Date().toISOString()}] Current UI state:`, {
+    editMode,
+    currentPreferences_frequently_used_words:
+      currentPreferences?.frequently_used_words,
+    currentPreferences_signature_expressions:
+      currentPreferences?.signature_expressions,
+    localPreferences_frequently_used_words:
+      localPreferences?.frequently_used_words,
+    preferences_frequently_used_words: preferences?.frequently_used_words,
+  });
 
   const handleSave = async () => {
     if (!localPreferences) return;
@@ -180,9 +371,15 @@ export function WritingProfileContent({
       const { error } = await supabase
         .from("user_preferences")
         .update({
-          frequently_used_words: localPreferences.frequently_used_words,
-          industry_jargon: localPreferences.industry_jargon,
-          signature_expressions: localPreferences.signature_expressions,
+          frequently_used_words: JSON.stringify(
+            localPreferences.frequently_used_words || []
+          ),
+          industry_jargon: JSON.stringify(
+            localPreferences.industry_jargon || []
+          ),
+          signature_expressions: JSON.stringify(
+            localPreferences.signature_expressions || []
+          ),
           emoji_usage_preference: localPreferences.emoji_usage_preference,
           average_sentence_length: localPreferences.average_sentence_length,
           content_length_preference: localPreferences.content_length_preference,
@@ -219,7 +416,7 @@ export function WritingProfileContent({
       setEditMode(false);
 
       // Update the main preferences state with saved data
-      setPreferences(localPreferences);
+      debugSetPreferences(localPreferences);
 
       // Revalidate server cache (but don't immediately fetch to avoid overwriting)
       try {
@@ -237,7 +434,9 @@ export function WritingProfileContent({
 
   const updateField = (field: keyof UserPreferences, value: any) => {
     if (!localPreferences) return;
-    setLocalPreferences((prev) => (prev ? { ...prev, [field]: value } : null));
+    debugSetLocalPreferences((prev: UserPreferences | null) =>
+      prev ? { ...prev, [field]: value } : null
+    );
   };
 
   const addToArray = (field: keyof UserPreferences, value: string) => {
@@ -539,8 +738,11 @@ export function WritingProfileContent({
 
       // Use setTimeout to ensure state updates are processed before saving
       setTimeout(async () => {
-        await handleSave();
-      }, 100);
+        if (localPreferences) {
+          // Save the updated preferences with analyzed data
+          await handleSave();
+        }
+      }, 1000); // Increased timeout to ensure state updates complete
     } catch (error) {
       console.error("Error adding sample post:", error);
       toast.error("Failed to add sample post");
@@ -550,7 +752,16 @@ export function WritingProfileContent({
   };
 
   const analyzeWritingStyle = async (posts: any[]) => {
-    if (posts.length === 0) return;
+    if (posts.length === 0) {
+      console.log("⚠️ No posts to analyze");
+      return;
+    }
+
+    console.log("🚀 Starting analysis with posts:", posts);
+    console.log(
+      "📄 Post contents:",
+      posts.map((p) => p.content)
+    );
 
     try {
       const response = await fetch("/api/analyze-writing-style", {
@@ -565,11 +776,15 @@ export function WritingProfileContent({
       if (!response.ok) throw new Error("Analysis failed");
 
       const analysis = await response.json();
-      console.log("Analysis result:", analysis);
+      console.log("🔍 Analysis result:", analysis);
+      console.log("📝 Frequently used words:", analysis.frequently_used_words);
+      console.log("✨ Signature expressions:", analysis.signature_expressions);
+      console.log("🏢 Industry jargon:", analysis.industry_jargon);
 
       // Update the preferences with analyzed data (preserve sample_posts)
       if (localPreferences) {
-        setLocalPreferences((prev) =>
+        console.log("🔄 First state update in analyzeWritingStyle...");
+        debugSetLocalPreferences((prev: UserPreferences | null) =>
           prev
             ? {
                 ...prev,
@@ -581,6 +796,8 @@ export function WritingProfileContent({
                   analysis.frequently_used_words ||
                   prev.frequently_used_words ||
                   [],
+                industry_jargon:
+                  analysis.industry_jargon || prev.industry_jargon || [],
                 signature_expressions:
                   analysis.signature_expressions ||
                   prev.signature_expressions ||
@@ -603,7 +820,9 @@ export function WritingProfileContent({
                   analysis.confidence_level || prev.confidence_level || 5,
                 energy_level: analysis.energy_level || prev.energy_level || 5,
                 writing_style_tone:
-                  analysis.tone || prev.writing_style_tone || "professional",
+                  analysis.tone?.split("|")[0] ||
+                  prev.writing_style_tone ||
+                  "professional",
                 humor_usage:
                   analysis.humor_usage || prev.humor_usage || "minimal",
 
@@ -642,6 +861,133 @@ export function WritingProfileContent({
               }
             : null
         );
+
+        // Also save the analyzed data to database immediately
+        console.log("💾 About to save analysis data:", analysis);
+        if (localPreferences && localPreferences.id) {
+          try {
+            // Clean and validate the tone
+            const cleanTone = analysis.tone?.split("|")[0]?.toLowerCase();
+            const validTones = [
+              "professional",
+              "casual",
+              "authoritative",
+              "conversational",
+              "inspirational",
+              "educational",
+            ];
+            const finalTone = validTones.includes(cleanTone)
+              ? cleanTone
+              : "professional";
+
+            const updateData = {
+              frequently_used_words: JSON.stringify(
+                analysis.frequently_used_words || []
+              ),
+              industry_jargon: JSON.stringify(analysis.industry_jargon || []),
+              signature_expressions: JSON.stringify(
+                analysis.signature_expressions || []
+              ),
+            };
+
+            console.log("🔍 Analysis data being saved:", {
+              raw_analysis: {
+                frequently_used_words: analysis.frequently_used_words,
+                industry_jargon: analysis.industry_jargon,
+                signature_expressions: analysis.signature_expressions,
+              },
+              stringified_data: updateData,
+            });
+
+            console.log("💾 Saving to database:", {
+              frequently_used_words: updateData.frequently_used_words,
+              industry_jargon: updateData.industry_jargon,
+              signature_expressions: updateData.signature_expressions,
+            });
+
+            const { error } = await supabase
+              .from("user_preferences")
+              .update({
+                ...updateData,
+                emoji_usage_preference:
+                  analysis.emoji_usage ||
+                  localPreferences.emoji_usage_preference ||
+                  "minimal",
+                average_sentence_length:
+                  analysis.sentence_length ||
+                  localPreferences.average_sentence_length ||
+                  "medium",
+                directness_level:
+                  analysis.directness_level ||
+                  localPreferences.directness_level ||
+                  5,
+                confidence_level:
+                  analysis.confidence_level ||
+                  localPreferences.confidence_level ||
+                  5,
+                energy_level:
+                  analysis.energy_level || localPreferences.energy_level || 5,
+                writing_style_tone: finalTone,
+                humor_usage:
+                  analysis.humor_usage ||
+                  localPreferences.humor_usage ||
+                  "minimal",
+                writing_style_formality:
+                  analysis.tone === "professional"
+                    ? 8
+                    : analysis.tone === "authoritative"
+                    ? 9
+                    : analysis.tone === "educational"
+                    ? 7
+                    : analysis.tone === "conversational"
+                    ? 4
+                    : analysis.tone === "casual"
+                    ? 3
+                    : analysis.tone === "inspirational"
+                    ? 6
+                    : localPreferences.writing_style_formality || 5,
+                question_usage:
+                  analysis.tone === "conversational"
+                    ? "frequent"
+                    : analysis.tone === "educational"
+                    ? "moderate"
+                    : analysis.tone === "professional"
+                    ? "minimal"
+                    : localPreferences.question_usage || "moderate",
+                personalization_data: {
+                  ...localPreferences.personalization_data,
+                  last_analysis: new Date().toISOString(),
+                  analysis_insights: analysis.insights || [],
+                  learning_summary: analysis.learning_summary || "",
+                },
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", localPreferences.id);
+
+            if (error) {
+              console.error("❌ Database save error details:", {
+                error,
+                message: error?.message,
+                details: error?.details,
+                hint: error?.hint,
+                code: error?.code,
+              });
+              toast.error("Failed to save analysis to database");
+            } else {
+              console.log("✅ Analysis saved to database successfully");
+              toast.success("Writing analysis updated!");
+
+              // State was already updated above after analysis - no need to update again
+              console.log("✅ Database saved, state already updated earlier");
+
+              // DON'T refresh from database immediately - it overwrites our changes!
+              // The database already has the data, no need to fetch again
+              console.log("⚠️ Skipping database refresh to prevent overwrite");
+            }
+          } catch (dbError) {
+            console.error("Database save error:", dbError);
+          }
+        }
 
         toast.success(
           "Writing style analyzed and profile updated! Check all tabs to see the auto-filled information.",
@@ -830,9 +1176,11 @@ export function WritingProfileContent({
                 </CardHeader>
                 <CardContent className="p-8 space-y-6">
                   <div className="space-y-4">
-                    <Label className="text-slate-700 font-medium">
-                      Words and phrases you commonly use
-                    </Label>
+                    <div className="flex justify-between items-center">
+                      <Label className="text-slate-700 font-medium">
+                        Words and phrases you commonly use
+                      </Label>
+                    </div>
                     {editMode && (
                       <div className="flex gap-2">
                         <Input

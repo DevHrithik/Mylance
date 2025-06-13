@@ -29,6 +29,7 @@ Please analyze and return a JSON object with the following structure:
 {
   "learning_summary": "A 2-3 sentence summary of what you learned about this person's writing style",
   "frequently_used_words": ["array", "of", "common", "words", "they", "use"],
+  "industry_jargon": ["industry", "specific", "terms", "they", "use"],
   "signature_expressions": ["unique phrases", "they commonly use"],
   "emoji_usage": "none|minimal|moderate|frequent",
   "sentence_length": "short|medium|long|varied",
@@ -41,15 +42,21 @@ Please analyze and return a JSON object with the following structure:
 }
 
 Focus on:
-- Extract at least 10-15 frequently used words (avoid common words like "the", "and", "is")
-- Identify 3-5 unique signature expressions or phrases they commonly use
+- Extract at least 10-15 frequently used words (avoid basic words like "the", "and", "is", "a", "to", "for", "of", "in", "on", "at", "with", "by"). Look for meaningful words they use repeatedly like action verbs, descriptive adjectives, business terms, etc.
+- Identify industry jargon, technical terms, or business terminology they use (like "stakeholders", "ROI", "analytics", "conversion", "optimization", etc.)
+- Identify 3-8 unique signature expressions, catchphrases, or distinctive ways they phrase things (like "game-changer", "at the end of the day", "here's the thing", etc.)
 - Their tone and energy level
 - How direct or subtle they are
 - Their confidence level
 - Their use of emojis and casual language
 - Sentence structure preferences
 
-Make sure to populate frequently_used_words and signature_expressions arrays with actual content from the posts.`;
+CRITICAL: Make sure to populate frequently_used_words, industry_jargon, and signature_expressions arrays with actual content from the posts. These arrays should NOT be empty. Extract real words and phrases that appear in the text.
+
+Example of good extractions:
+- frequently_used_words: ["strategy", "growth", "insights", "optimize", "leverage", "implement", "results", "performance", "value", "opportunity"]
+- industry_jargon: ["stakeholders", "KPIs", "ROI", "conversion", "analytics", "optimization", "scalable", "engagement"]
+- signature_expressions: ["game-changer", "here's the bottom line", "at the end of the day", "let's dive deep"]`;
 
     const completion = await openai.chat.completions.create({
       model: "gpt-4",
@@ -77,6 +84,16 @@ Make sure to populate frequently_used_words and signature_expressions arrays wit
     let analysis;
     try {
       analysis = JSON.parse(responseText);
+      console.log("🔍 Raw AI response:", responseText);
+      console.log(
+        "📝 Parsed frequently_used_words:",
+        analysis.frequently_used_words
+      );
+      console.log(
+        "✨ Parsed signature_expressions:",
+        analysis.signature_expressions
+      );
+      console.log("🏢 Parsed industry_jargon:", analysis.industry_jargon);
     } catch (parseError) {
       console.error("Failed to parse OpenAI response:", responseText);
       // Fallback analysis
@@ -84,6 +101,7 @@ Make sure to populate frequently_used_words and signature_expressions arrays wit
         learning_summary:
           "I've analyzed your writing style and identified key patterns in your communication approach.",
         frequently_used_words: [],
+        industry_jargon: [],
         signature_expressions: [],
         emoji_usage: "minimal",
         sentence_length: "medium",

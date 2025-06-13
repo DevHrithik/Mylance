@@ -186,6 +186,11 @@ export function PostsContent({
     null
   );
 
+  // Debug log whenever highlightedPostId changes
+  useEffect(() => {
+    console.log("🎯 HIGHLIGHT STATE CHANGED:", highlightedPostId);
+  }, [highlightedPostId]);
+
   const [searchTerm, setSearchTerm] = useState(searchParams.search || "");
   const [statusFilter, setStatusFilter] = useState(
     searchParams.status || "all"
@@ -208,6 +213,7 @@ export function PostsContent({
   };
 
   useEffect(() => {
+    console.log("🔥 USEEFFECT TRIGGERED - Starting highlight logic");
     const draftId = searchParams.draft;
     const updatedId = searchParams.updated;
 
@@ -215,6 +221,7 @@ export function PostsContent({
       draftId,
       updatedId,
       searchParams,
+      allSearchParams: Object.keys(searchParams),
     });
 
     // Check localStorage as fallback
@@ -244,8 +251,15 @@ export function PostsContent({
     }
 
     if (targetId) {
-      console.log("PostsContent: Setting highlighted post ID:", targetId);
-      setHighlightedPostId(targetId);
+      console.log(
+        "PostsContent: Setting highlighted post ID:",
+        targetId,
+        "type:",
+        typeof targetId
+      );
+      // Ensure targetId is a string for consistent comparison
+      const targetIdStr = String(targetId);
+      setHighlightedPostId(targetIdStr);
 
       const message =
         highlightType === "draft"
@@ -348,8 +362,9 @@ export function PostsContent({
     return [...filteredPosts].sort((a, b) => {
       // Always put highlighted post at the very top
       if (highlightedPostId) {
-        if (a.id === highlightedPostId) return -1;
-        if (b.id === highlightedPostId) return 1;
+        const highlightIdStr = String(highlightedPostId);
+        if (String(a.id) === highlightIdStr) return -1;
+        if (String(b.id) === highlightIdStr) return 1;
       }
 
       const now = new Date();
@@ -728,10 +743,18 @@ export function PostsContent({
   };
 
   const renderPostCard = (post: Post) => {
-    const isHighlighted = highlightedPostId === post.id;
+    // Ensure both IDs are strings for comparison
+    const postIdStr = String(post.id);
+    const highlightIdStr = highlightedPostId ? String(highlightedPostId) : null;
+    const isHighlighted = highlightIdStr === postIdStr;
+
     console.log(
-      `PostsContent: Rendering post ${post.id}, highlighted: ${isHighlighted}, highlightedPostId: ${highlightedPostId}`
+      `🎨 RENDERING POST: ${postIdStr}, highlighted: ${isHighlighted}, highlightedPostId: ${highlightIdStr}, types: post.id(${typeof post.id}), highlighted(${typeof highlightedPostId})`
     );
+
+    if (isHighlighted) {
+      console.log("🔥 POST IS HIGHLIGHTED! Should show blue glow and badge");
+    }
 
     return (
       <Card
@@ -745,13 +768,15 @@ export function PostsContent({
           post.hasAnalytics ? "ring-1 ring-green-200 border-green-200" : ""
         } ${
           isHighlighted
-            ? "ring-4 ring-blue-500 border-blue-500 bg-gradient-to-r from-blue-50 to-indigo-50 shadow-xl transform scale-105 z-10 relative"
+            ? "ring-4 ring-blue-500 border-blue-500 bg-blue-100 shadow-lg transform scale-105 z-10 relative border-4"
             : ""
         }`}
         style={
           isHighlighted
             ? {
-                animation: "highlight-pulse 2s infinite ease-in-out",
+                backgroundColor: "#dbeafe",
+                borderColor: "#3b82f6",
+                boxShadow: "0 10px 15px rgba(59, 130, 246, 0.3)",
                 position: "relative",
                 zIndex: 10,
               }
@@ -1082,6 +1107,26 @@ export function PostsContent({
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <Button
+            onClick={() => {
+              console.log("🧪 MANUAL TEST: Setting highlight to first post");
+              const firstPost = data.posts[0];
+              if (firstPost) {
+                setHighlightedPostId(firstPost.id);
+                toast.success("Test highlight activated!");
+                setTimeout(() => {
+                  setHighlightedPostId(null);
+                  toast.info("Test highlight removed");
+                }, 5000);
+              }
+            }}
+            variant="outline"
+            size="sm"
+            className="bg-yellow-50 border-yellow-200 text-yellow-700 hover:bg-yellow-100"
+          >
+            🧪 Test Highlight
+          </Button>
+
           <Button
             onClick={refetch}
             variant="outline"
