@@ -147,38 +147,45 @@ export default function UserPromptsPage({ params }: PageProps) {
   const fetchData = useCallback(async () => {
     const supabase = createClient();
 
-    // Fetch user data with content pillars
-    const { data: userData, error: userError } = await supabase
-      .from("profiles")
-      .select("id, email, first_name, content_pillars")
-      .eq("id", resolvedParams.id)
-      .single();
+    try {
+      // Fetch user data with content pillars
+      const { data: userData, error: userError } = await supabase
+        .from("profiles")
+        .select("id, email, first_name, content_pillars")
+        .eq("id", resolvedParams.id)
+        .single();
 
-    if (userError) {
-      toast.error("User not found");
-      router.push("/admin/users");
-      return;
+      if (userError || !userData) {
+        console.error("User not found:", userError);
+        toast.error("User not found");
+        // Use window.location instead of router.push to avoid navigation issues
+        window.location.href = "/admin/users";
+        return;
+      }
+
+      setUser(userData);
+
+      // Fetch prompts
+      const { data: promptsData, error: promptsError } = await supabase
+        .from("content_prompts")
+        .select("*")
+        .eq("user_id", resolvedParams.id)
+        .eq("is_generated_by_admin", true)
+        .order("scheduled_date", { ascending: true });
+
+      if (promptsError) {
+        console.error("Error fetching prompts:", promptsError);
+        toast.error("Failed to fetch prompts");
+      } else {
+        setPrompts(promptsData || []);
+      }
+    } catch (error) {
+      console.error("Error in fetchData:", error);
+      toast.error("An error occurred while loading data");
+    } finally {
+      setLoading(false);
     }
-
-    setUser(userData);
-
-    // Fetch prompts
-    const { data: promptsData, error: promptsError } = await supabase
-      .from("content_prompts")
-      .select("*")
-      .eq("user_id", resolvedParams.id)
-      .eq("is_generated_by_admin", true)
-      .order("scheduled_date", { ascending: true });
-
-    if (promptsError) {
-      console.error("Error fetching prompts:", promptsError);
-      toast.error("Failed to fetch prompts");
-    } else {
-      setPrompts(promptsData || []);
-    }
-
-    setLoading(false);
-  }, [resolvedParams.id, router]);
+  }, [resolvedParams.id]);
 
   useEffect(() => {
     fetchData();
@@ -346,7 +353,8 @@ export default function UserPromptsPage({ params }: PageProps) {
         .eq("id", promptId);
 
       if (error) {
-        throw new Error("Failed to delete prompt");
+        console.error("Delete error:", error);
+        throw new Error(`Failed to delete prompt: ${error.message}`);
       }
 
       setPrompts((prev) => prev.filter((prompt) => prompt.id !== promptId));
@@ -354,7 +362,9 @@ export default function UserPromptsPage({ params }: PageProps) {
       toast.success("Prompt deleted successfully!");
     } catch (error) {
       console.error("Error deleting prompt:", error);
-      toast.error("Failed to delete prompt");
+      toast.error(
+        error instanceof Error ? error.message : "Failed to delete prompt"
+      );
     }
   };
 

@@ -13,6 +13,7 @@ import {
   Target,
   Zap,
   MessageSquare,
+  Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,6 +44,7 @@ interface UserData {
   ideal_target_client: string | null;
   client_pain_points: string | null;
   unique_value_proposition: string | null;
+  proof_points: string | null;
   content_strategy: string | null;
   content_pillars: string[];
   onboarding_completed: boolean;
@@ -77,6 +79,7 @@ export default function UserDetailPage({ params }: PageProps) {
     unique_value_proposition: "",
     content_strategy: "",
     content_pillars: ["", "", ""],
+    proof_points: "",
   });
   const [originalData, setOriginalData] = useState(formData);
   const router = useRouter();
@@ -84,22 +87,32 @@ export default function UserDetailPage({ params }: PageProps) {
   const getUserData = useCallback(async () => {
     const supabase = createClient();
 
-    const { data: userData, error } = await supabase
+    const { data: userData, error: userError } = await supabase
       .from("profiles")
       .select(
         `
-        *,
-        subscriptions (
-          plan_type,
-          status,
-          current_period_end
-        )
+        id,
+        email,
+        first_name,
+        business_type,
+        business_size,
+        ideal_target_client,
+        client_pain_points,
+        unique_value_proposition,
+        proof_points,
+        content_strategy,
+        content_pillars,
+        onboarding_completed,
+        profile_locked,
+        created_at,
+        last_login_at,
+        subscriptions(plan_type, status, current_period_end)
       `
       )
       .eq("id", resolvedParams.id)
       .single();
 
-    if (error) {
+    if (userError) {
       notFound();
       return;
     }
@@ -134,6 +147,7 @@ export default function UserDetailPage({ params }: PageProps) {
       unique_value_proposition: userData.unique_value_proposition || "",
       content_strategy: userData.content_strategy || "",
       content_pillars: normalizedPillars.slice(0, 3),
+      proof_points: userData.proof_points || "",
     };
 
     setFormData(initialFormData);
@@ -229,38 +243,43 @@ export default function UserDetailPage({ params }: PageProps) {
 
   const handleSaveICP = async () => {
     setSavingICP(true);
-    const supabase = createClient();
 
-    const updateData = {
-      ideal_target_client: formData.ideal_target_client,
-      client_pain_points: formData.client_pain_points,
-      unique_value_proposition: formData.unique_value_proposition,
-      content_strategy: formData.content_strategy,
-    };
+    try {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("profiles")
+        .update({
+          ideal_target_client: formData.ideal_target_client,
+          client_pain_points: formData.client_pain_points,
+          unique_value_proposition: formData.unique_value_proposition,
+          proof_points: formData.proof_points,
+          content_strategy: formData.content_strategy,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", resolvedParams.id);
 
-    const { error } = await supabase
-      .from("profiles")
-      .update(updateData)
-      .eq("id", resolvedParams.id);
+      if (error) {
+        throw new Error("Failed to update ICP data");
+      }
 
-    if (error) {
-      toast.error("Failed to update ICP information");
-      console.error("Error updating ICP:", error);
-    } else {
-      toast.success("ICP information updated successfully");
-      // Update original data for these fields
+      // Update original data state
       setOriginalData((prev) => ({
         ...prev,
         ideal_target_client: formData.ideal_target_client,
         client_pain_points: formData.client_pain_points,
         unique_value_proposition: formData.unique_value_proposition,
+        proof_points: formData.proof_points,
         content_strategy: formData.content_strategy,
       }));
       // Refresh user data
       await getUserData();
+      toast.success("ICP data updated successfully!");
+    } catch (error) {
+      console.error("Error updating ICP:", error);
+      toast.error("Failed to update ICP data");
+    } finally {
+      setSavingICP(false);
     }
-
-    setSavingICP(false);
   };
 
   const handleSavePillars = async () => {
@@ -483,7 +502,8 @@ export default function UserDetailPage({ params }: PageProps) {
     formData.client_pain_points !== originalData.client_pain_points ||
     formData.unique_value_proposition !==
       originalData.unique_value_proposition ||
-    formData.content_strategy !== originalData.content_strategy;
+    formData.content_strategy !== originalData.content_strategy ||
+    formData.proof_points !== originalData.proof_points;
 
   const pillarsChanged =
     JSON.stringify(formData.content_pillars) !==
@@ -736,6 +756,7 @@ export default function UserDetailPage({ params }: PageProps) {
                           client_pain_points: originalData.client_pain_points,
                           unique_value_proposition:
                             originalData.unique_value_proposition,
+                          proof_points: originalData.proof_points,
                           content_strategy: originalData.content_strategy,
                         }));
                       }}
@@ -799,6 +820,20 @@ export default function UserDetailPage({ params }: PageProps) {
                     )
                   }
                   placeholder="Describe unique value proposition..."
+                  className="mt-1"
+                  rows={3}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-500">
+                  Proof Points
+                </label>
+                <Textarea
+                  value={formData.proof_points}
+                  onChange={(e) =>
+                    handleInputChange("proof_points", e.target.value)
+                  }
+                  placeholder="Describe proof points, case studies, testimonials..."
                   className="mt-1"
                   rows={3}
                 />
@@ -894,7 +929,7 @@ export default function UserDetailPage({ params }: PageProps) {
               <button
                 onClick={handleMarkAsOnboarded}
                 disabled={!user.profile_locked || loading}
-                className={`w-full flex items-center justify-center p-4 rounded-lg shadow-lg transition-all duration-200 ease-in-out ${
+                className={`w-full flex items-center justify-center p-4 rounded-lg shadow-lg transition-all duration-200 ease-in-out cursor-pointer ${
                   !user.profile_locked
                     ? "bg-gray-400 cursor-not-allowed text-gray-600"
                     : loading
@@ -916,7 +951,7 @@ export default function UserDetailPage({ params }: PageProps) {
               <button
                 onClick={handleGenerateContentStrategy}
                 disabled={generatingStrategy}
-                className={`w-full flex items-center justify-center p-4 rounded-lg shadow-lg transform transition-all duration-200 ease-in-out ${
+                className={`w-full flex items-center justify-center p-4 rounded-lg shadow-lg transform transition-all duration-200 ease-in-out cursor-pointer ${
                   generatingStrategy
                     ? "bg-gray-400 cursor-not-allowed"
                     : "bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:shadow-xl hover:scale-105 hover:from-blue-600 hover:to-blue-700"
@@ -934,7 +969,7 @@ export default function UserDetailPage({ params }: PageProps) {
               <button
                 onClick={handleGenerateContentPillars}
                 disabled={generatingPillars}
-                className={`w-full flex items-center justify-center p-4 rounded-lg shadow-lg transform transition-all duration-200 ease-in-out ${
+                className={`w-full flex items-center justify-center p-4 rounded-lg shadow-lg transform transition-all duration-200 ease-in-out cursor-pointer ${
                   generatingPillars
                     ? "bg-gray-400 cursor-not-allowed"
                     : "bg-gradient-to-r from-purple-500 to-purple-600 text-white hover:shadow-xl hover:scale-105 hover:from-purple-600 hover:to-purple-700"
@@ -952,7 +987,7 @@ export default function UserDetailPage({ params }: PageProps) {
               <button
                 onClick={handleGeneratePrompts}
                 disabled={generatingPrompts}
-                className={`w-full flex items-center justify-center p-4 rounded-lg shadow-lg transform transition-all duration-200 ease-in-out ${
+                className={`w-full flex items-center justify-center p-4 rounded-lg shadow-lg transform transition-all duration-200 ease-in-out cursor-pointer ${
                   generatingPrompts
                     ? "bg-gray-400 cursor-not-allowed"
                     : "bg-gradient-to-r from-orange-500 to-orange-600 text-white hover:shadow-xl hover:scale-105 hover:from-orange-600 hover:to-orange-700"
@@ -969,7 +1004,7 @@ export default function UserDetailPage({ params }: PageProps) {
                 onClick={() =>
                   router.push(`/admin/users/${resolvedParams.id}/prompts`)
                 }
-                className="w-full flex items-center justify-center p-4 bg-gradient-to-r from-indigo-500 to-indigo-600 text-white rounded-lg shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 ease-in-out hover:from-indigo-600 hover:to-indigo-700"
+                className="w-full flex items-center justify-center p-4 bg-gradient-to-r from-indigo-500 to-indigo-600 text-white rounded-lg shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 ease-in-out hover:from-indigo-600 hover:to-indigo-700 cursor-pointer"
               >
                 <FileText className="h-5 w-5 mr-3" />
                 <span className="font-medium">Manage Prompts</span>
@@ -980,7 +1015,7 @@ export default function UserDetailPage({ params }: PageProps) {
                 onClick={() =>
                   router.push(`/admin/users/${resolvedParams.id}/feedbacks`)
                 }
-                className="w-full flex items-center justify-center p-4 bg-gradient-to-r from-teal-500 to-teal-600 text-white rounded-lg shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 ease-in-out hover:from-teal-600 hover:to-teal-700"
+                className="w-full flex items-center justify-center p-4 bg-gradient-to-r from-teal-500 to-teal-600 text-white rounded-lg shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 ease-in-out hover:from-teal-600 hover:to-teal-700 cursor-pointer"
               >
                 <MessageSquare className="h-5 w-5 mr-3" />
                 <span className="font-medium">Feedbacks</span>

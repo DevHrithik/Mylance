@@ -171,6 +171,10 @@ export function PromptCalendar({
       (prompt) => prompt.scheduled_date && prompt.pushed_to_calendar === true
     );
 
+    if (filteredPrompts.length === 0) {
+      return [];
+    }
+
     // Get all unique weeks that have prompts
     const weeksWithPrompts = new Set<string>();
     filteredPrompts.forEach((prompt) => {
@@ -178,7 +182,10 @@ export function PromptCalendar({
       // Get Monday of this week (week start)
       const dayOfWeek = date.getUTCDay();
       const monday = new Date(date);
-      monday.setUTCDate(date.getUTCDate() - dayOfWeek + 1);
+      // If it's Sunday (0), go back 6 days to Monday, otherwise go back dayOfWeek-1 days
+      const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+      monday.setUTCDate(date.getUTCDate() - daysToMonday);
+
       const weekKey = `${monday.getUTCFullYear()}-${String(
         monday.getUTCMonth() + 1
       ).padStart(2, "0")}-${String(monday.getUTCDate()).padStart(2, "0")}`;
@@ -282,37 +289,29 @@ export function PromptCalendar({
 
     if (!firstDay || !lastDay) return "No scheduled prompts";
 
-    // Since we now show Monday-Wednesday-Friday in groups of 3,
-    // we want to show the week range
+    // Calculate the full week range (Monday to Sunday)
     const firstDate = new Date(firstDay.date + "T00:00:00Z");
-    const lastDate = new Date(lastDay.date + "T00:00:00Z");
-
-    // Check if this is a complete week (Mon-Wed-Fri of same week)
-    const firstMonday = new Date(firstDate);
+    
+    // Find the Monday of the first date's week
     const firstDayOfWeek = firstDate.getUTCDay();
-    firstMonday.setUTCDate(firstDate.getUTCDate() - firstDayOfWeek + 1);
+    const daysToMonday = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1;
+    const monday = new Date(firstDate);
+    monday.setUTCDate(firstDate.getUTCDate() - daysToMonday);
+    
+    // Find the Sunday of the same week
+    const sunday = new Date(monday);
+    sunday.setUTCDate(monday.getUTCDate() + 6);
 
-    const lastMonday = new Date(lastDate);
-    const lastDayOfWeek = lastDate.getUTCDay();
-    lastMonday.setUTCDate(lastDate.getUTCDate() - lastDayOfWeek + 1);
+    const monthName = monthNames[monday.getUTCMonth()];
+    const mondayNum = monday.getUTCDate();
+    const sundayNum = sunday.getUTCDate();
+    const sundayMonth = monthNames[sunday.getUTCMonth()];
 
-    // If both dates are in the same week, show "Week of [Monday date]"
-    if (firstMonday.getTime() === lastMonday.getTime()) {
-      const mondayNum = firstMonday.getUTCDate();
-      const monthName = monthNames[firstMonday.getUTCMonth()];
-      return `${monthName} ${mondayNum}-${mondayNum + 4}`;
+    // If the week spans two months
+    if (monday.getUTCMonth() !== sunday.getUTCMonth()) {
+      return `${monthName} ${mondayNum} - ${sundayMonth} ${sundayNum}`;
     } else {
-      // Multiple weeks, show range
-      const firstMondayNum = firstMonday.getUTCDate();
-      const lastFridayNum = lastMonday.getUTCDate() + 4;
-      const firstMonth = monthNames[firstMonday.getUTCMonth()];
-      const lastMonth = monthNames[lastMonday.getUTCMonth()];
-
-      if (firstMonth === lastMonth) {
-        return `${firstMonth} ${firstMondayNum}-${lastFridayNum}`;
-      } else {
-        return `${firstMonth} ${firstMondayNum} - ${lastMonth} ${lastFridayNum}`;
-      }
+      return `${monthName} ${mondayNum}-${sundayNum}`;
     }
   };
 

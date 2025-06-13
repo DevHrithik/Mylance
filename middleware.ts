@@ -247,10 +247,10 @@ export async function middleware(request: NextRequest) {
           )
         );
 
-        const { data: subscription } = await Promise.race([
+        const { data: subscription } = (await Promise.race([
           subscriptionPromise,
           subscriptionTimeout,
-        ]);
+        ])) as { data: any; error?: any };
 
         hasActiveSubscription = !!(
           subscription &&

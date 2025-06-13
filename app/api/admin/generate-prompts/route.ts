@@ -3,8 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import OpenAI from "openai";
 
 const openai = new OpenAI({
-  apiKey:
-    process.env.OPENAI_API_KEY,
+  apiKey: process.env.OPENAI_API_KEY,
   timeout: 30000, // 30 seconds timeout
 });
 
@@ -526,7 +525,7 @@ Generate 12 diverse prompts that cover different categories and pillars. Make th
     // Calculate schedule dates using timezone-safe M/W/F scheduling
     const getNextScheduleDates = (count: number) => {
       const dates = [];
-      const promptsPerDay = 2;
+      const promptsPerDay = 2; // Always 2 prompts per day
 
       // Generate M/W/F dates, with 2 prompts per day
       const totalDaysNeeded = Math.ceil(count / promptsPerDay);
@@ -567,13 +566,18 @@ Generate 12 diverse prompts that cover different categories and pillars. Make th
         }
       }
 
-      // Assign dates to prompts (2 prompts per day)
+      // Assign dates to prompts (2 prompts per day max)
       for (let i = 0; i < count; i++) {
         const dayIndex = Math.floor(i / promptsPerDay);
-        dates.push(mwfDates[dayIndex]);
+        if (dayIndex < mwfDates.length) {
+          dates.push(mwfDates[dayIndex]);
+        }
       }
 
-      console.log("📅 Generated schedule dates (M/W/F only):", dates);
+      console.log(
+        "📅 Generated schedule dates (M/W/F only, 2 per day max):",
+        dates
+      );
       console.log("📅 Unique dates:", [...new Set(dates)]);
       return dates;
     };
