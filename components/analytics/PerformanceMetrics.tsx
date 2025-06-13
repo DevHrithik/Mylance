@@ -11,19 +11,35 @@ import {
   MessageSquare,
   Share,
 } from "lucide-react";
-import { useAnalytics } from "@/hooks/useAnalytics";
 
-export function PerformanceMetrics() {
-  const { postPerformance, loading } = useAnalytics();
+interface Post {
+  id: string;
+  title?: string;
+  content?: string;
+  content_type?: string;
+  engagement_rate: number;
+  impressions: number;
+  likes: number;
+  comments: number;
+  shares: number;
+}
 
-  if (loading) {
-    return (
-      <div className="animate-pulse space-y-4">
-        <div className="h-8 bg-gray-200 rounded"></div>
-        <div className="h-32 bg-gray-200 rounded"></div>
-      </div>
-    );
-  }
+interface Stats {
+  totalPosts: number;
+  totalImpressions: number;
+  totalLikes: number;
+  totalComments: number;
+  totalShares: number;
+  averageEngagementRate: number;
+}
+
+interface PerformanceMetricsProps {
+  data: Post[];
+  stats: Stats;
+}
+
+export function PerformanceMetrics({ data, stats }: PerformanceMetricsProps) {
+  const postPerformance = data;
 
   if (!postPerformance || postPerformance.length === 0) {
     return (
@@ -35,26 +51,13 @@ export function PerformanceMetrics() {
     );
   }
 
-  // Calculate aggregated metrics
-  const totalPosts = postPerformance.length;
-  const totalImpressions = postPerformance.reduce(
-    (sum, post) => sum + post.impressions,
-    0
-  );
-  const totalLikes = postPerformance.reduce((sum, post) => sum + post.likes, 0);
-  const totalComments = postPerformance.reduce(
-    (sum, post) => sum + post.comments,
-    0
-  );
-  const totalShares = postPerformance.reduce(
-    (sum, post) => sum + post.shares,
-    0
-  );
-  const avgEngagement =
-    postPerformance.reduce(
-      (sum, post) => sum + (post.engagement_rate || 0),
-      0
-    ) / totalPosts;
+  // Calculate aggregated metrics from passed stats
+  const totalPosts = stats.totalPosts;
+  const totalImpressions = stats.totalImpressions;
+  const totalLikes = stats.totalLikes;
+  const totalComments = stats.totalComments;
+  const totalShares = stats.totalShares;
+  const avgEngagement = stats.averageEngagementRate;
 
   // Best performing post
   const bestPost = postPerformance.reduce((best, current) =>
@@ -93,7 +96,7 @@ export function PerformanceMetrics() {
 
   // Content type performance
   const contentTypeStats = postPerformance.reduce((acc, post) => {
-    const type = post.post?.content_type || "post";
+    const type = post.content_type || "post";
     if (!acc[type]) {
       acc[type] = { count: 0, totalEngagement: 0, totalImpressions: 0 };
     }
@@ -157,8 +160,8 @@ export function PerformanceMetrics() {
             </Badge>
           </div>
           <h4 className="font-medium text-gray-900 mb-1">
-            {bestPost.post?.title ||
-              `${bestPost.post?.content?.substring(0, 60)}...` ||
+            {bestPost.title ||
+              `${bestPost.content?.substring(0, 60)}...` ||
               "Untitled Post"}
           </h4>
           <div className="flex items-center gap-4 text-sm text-gray-600">

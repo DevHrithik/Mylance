@@ -101,23 +101,35 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Calculate updated learning metrics
-    const { data: metricsData, error: metricsError } = await supabase.rpc(
-      "calculate_learning_metrics",
-      { target_user_id: user.id }
-    );
+    // Run heavy operations in background (non-blocking)
+    Promise.all([
+      // Calculate updated learning metrics (non-blocking)
+      Promise.resolve(
+        supabase.rpc("calculate_learning_metrics", { target_user_id: user.id })
+      )
+        .then(({ data, error }) => {
+          if (error) console.error("Error calculating metrics:", error);
+          return data;
+        })
+        .catch((error: any) => {
+          console.error("Metrics calculation failed:", error);
+          return null;
+        }),
 
-    if (metricsError) {
-      console.error("Error calculating metrics:", metricsError);
-    }
-
-    // Update user preferences with new learning insights
-    await updateUserPreferences(supabase, user.id, learning_insights);
+      // Update user preferences (non-blocking)
+      updateUserPreferences(supabase, user.id, learning_insights).catch(
+        (error: any) => {
+          console.error("User preferences update failed:", error);
+        }
+      ),
+    ]).catch((error: any) => {
+      console.error("Background tasks failed:", error);
+      // Don't fail the request if background tasks fail
+    });
 
     return NextResponse.json({
       success: true,
       edit_id: editRecord.id,
-      learning_metrics: metricsData || {},
       message: "Edit tracked successfully",
     });
   } catch (error) {

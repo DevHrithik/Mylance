@@ -29,6 +29,7 @@ export function PromptLibraryContent({
         .from("content_prompts")
         .select("*")
         .eq("user_id", userId)
+        .order("scheduled_date", { ascending: true, nullsFirst: true })
         .order("created_at", { ascending: false });
 
       if (promptsError) {

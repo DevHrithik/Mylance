@@ -124,7 +124,7 @@ export function QuickRating({
           type="button"
           onClick={() => handleRating(star)}
           disabled={isSubmitting}
-          className="hover:scale-110 transition-transform disabled:opacity-50"
+          className="hover:scale-110 transition-transform disabled:opacity-50 cursor-pointer"
         >
           <Star
             className={`h-4 w-4 ${

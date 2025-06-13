@@ -587,7 +587,7 @@ export function OnboardingWizard() {
                   <button
                     key={option.id}
                     onClick={() => updateData("businessType", option.text)}
-                    className={`w-full p-5 border-2 rounded-lg text-left transition-colors text-lg ${
+                    className={`w-full p-5 border-2 rounded-lg text-left transition-colors text-lg cursor-pointer ${
                       data.businessType === option.text
                         ? "border-teal-500 bg-teal-50 text-teal-700"
                         : "border-gray-300 hover:border-teal-300 text-gray-700"
@@ -641,7 +641,7 @@ export function OnboardingWizard() {
                   <button
                     key={option.id}
                     onClick={() => updateData("businessSize", option.text)}
-                    className={`w-full p-5 border-2 rounded-lg text-left transition-colors text-lg ${
+                    className={`w-full p-5 border-2 rounded-lg text-left transition-colors text-lg cursor-pointer ${
                       data.businessSize === option.text
                         ? "border-teal-500 bg-teal-50 text-teal-700"
                         : "border-gray-300 hover:border-teal-300 text-gray-700"
@@ -704,7 +704,7 @@ export function OnboardingWizard() {
                   <button
                     key={option.id}
                     onClick={() => updateData("businessStage", option.text)}
-                    className={`w-full p-5 border-2 rounded-lg text-left transition-colors text-lg ${
+                    className={`w-full p-5 border-2 rounded-lg text-left transition-colors text-lg cursor-pointer ${
                       data.businessStage === option.text
                         ? "border-teal-500 bg-teal-50 text-teal-700"
                         : "border-gray-300 hover:border-teal-300 text-gray-700"
@@ -759,7 +759,7 @@ export function OnboardingWizard() {
                     onClick={() =>
                       updateData("linkedinImportance", option.text)
                     }
-                    className={`w-full p-5 border-2 rounded-lg text-left transition-colors text-lg ${
+                    className={`w-full p-5 border-2 rounded-lg text-left transition-colors text-lg cursor-pointer ${
                       data.linkedinImportance === option.text
                         ? "border-teal-500 bg-teal-50 text-teal-700"
                         : "border-gray-300 hover:border-teal-300 text-gray-700"
@@ -826,7 +826,7 @@ export function OnboardingWizard() {
                     onClick={() =>
                       updateData("investmentWillingness", option.text)
                     }
-                    className={`w-full p-5 border-2 rounded-lg text-left transition-colors text-lg ${
+                    className={`w-full p-5 border-2 rounded-lg text-left transition-colors text-lg cursor-pointer ${
                       data.investmentWillingness === option.text
                         ? "border-teal-500 bg-teal-50 text-teal-700"
                         : "border-gray-300 hover:border-teal-300 text-gray-700"
@@ -890,7 +890,7 @@ export function OnboardingWizard() {
                   <button
                     key={option.id}
                     onClick={() => updateData("postingMindset", option.text)}
-                    className={`w-full p-5 border-2 rounded-lg text-left transition-colors text-lg ${
+                    className={`w-full p-5 border-2 rounded-lg text-left transition-colors text-lg cursor-pointer ${
                       data.postingMindset === option.text
                         ? "border-teal-500 bg-teal-50 text-teal-700"
                         : "border-gray-300 hover:border-teal-300 text-gray-700"
@@ -945,7 +945,7 @@ export function OnboardingWizard() {
                     onClick={() =>
                       updateData("currentPostingFrequency", option.text)
                     }
-                    className={`w-full p-5 border-2 rounded-lg text-left transition-colors text-lg ${
+                    className={`w-full p-5 border-2 rounded-lg text-left transition-colors text-lg cursor-pointer ${
                       data.currentPostingFrequency === option.text
                         ? "border-teal-500 bg-teal-50 text-teal-700"
                         : "border-gray-300 hover:border-teal-300 text-gray-700"
@@ -1011,7 +1011,7 @@ export function OnboardingWizard() {
                     onClick={() =>
                       toggleMultiSelect("clientAttractionMethods", option.text)
                     }
-                    className={`w-full p-5 border-2 rounded-lg text-left transition-colors text-lg ${
+                    className={`w-full p-5 border-2 rounded-lg text-left transition-colors text-lg cursor-pointer ${
                       data.clientAttractionMethods.includes(option.text)
                         ? "border-teal-500 bg-teal-50 text-teal-700"
                         : "border-gray-300 hover:border-teal-300 text-gray-700"

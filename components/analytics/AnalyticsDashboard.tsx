@@ -117,6 +117,7 @@ export function AnalyticsDashboard({
   const handleRegenerateInsights = async () => {
     setShowRegenerationModal(true);
     setRegeneratingInsights(true);
+
     try {
       const response = await fetch("/api/analytics/generate-insights", {
         method: "POST",
@@ -131,14 +132,16 @@ export function AnalyticsDashboard({
       const result = await response.json();
       toast.success(`Generated ${result.count || 0} new insights!`);
 
-      // Refresh the page to show new insights
-      window.location.reload();
+      // Small delay to show completion before refresh
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500);
     } catch (error) {
       console.error("Error regenerating insights:", error);
       toast.error("Failed to regenerate insights");
+      setShowRegenerationModal(false);
     } finally {
       setRegeneratingInsights(false);
-      setShowRegenerationModal(false);
     }
   };
 
@@ -693,7 +696,7 @@ export function AnalyticsDashboard({
       </Card>
 
       {/* Charts and Performance */}
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -702,19 +705,19 @@ export function AnalyticsDashboard({
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <EngagementChart />
+            <EngagementChart data={topPosts} />
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Target className="h-5 w-5" />
+              <BarChart3 className="h-5 w-5" />
               Performance Breakdown
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <PerformanceMetrics />
+            <PerformanceMetrics data={topPosts} stats={transformedStats} />
           </CardContent>
         </Card>
       </div>

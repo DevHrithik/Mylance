@@ -26,7 +26,7 @@ export default async function CreatePostPage({
     // Get user authentication with timeout
     const userPromise = supabase.auth.getUser();
     const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error("Auth timeout")), 5000)
+      setTimeout(() => reject(new Error("Auth timeout")), 3000)
     );
 
     const result = await Promise.race([userPromise, timeoutPromise]);
@@ -73,12 +73,21 @@ async function CreatePostServerWrapper({
 
     // Pre-fetch data if needed
     if (searchParams.edit) {
-      const { data: postData, error: postError } = await supabase
+      const postPromise = supabase
         .from("posts")
         .select("*")
         .eq("id", parseInt(searchParams.edit))
         .eq("user_id", userId)
         .single();
+
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Post fetch timeout")), 2000)
+      );
+
+      const { data: postData, error: postError } = (await Promise.race([
+        postPromise,
+        timeoutPromise,
+      ])) as any;
 
       if (postError) {
         console.error("Failed to fetch post for editing:", postError);
@@ -97,12 +106,21 @@ async function CreatePostServerWrapper({
 
       initialData = { type: "edit", data: postData };
     } else if (searchParams.prompt) {
-      const { data: promptData, error: promptError } = await supabase
+      const promptPromise = supabase
         .from("content_prompts")
         .select("*")
         .eq("id", parseInt(searchParams.prompt))
         .eq("user_id", userId)
         .single();
+
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Prompt fetch timeout")), 2000)
+      );
+
+      const { data: promptData, error: promptError } = (await Promise.race([
+        promptPromise,
+        timeoutPromise,
+      ])) as any;
 
       if (promptError) {
         console.error("Failed to fetch prompt:", promptError);

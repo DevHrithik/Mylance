@@ -211,8 +211,15 @@ export function PostsContent({
     const draftId = searchParams.draft;
     const updatedId = searchParams.updated;
 
+    console.log("PostsContent: searchParams:", {
+      draftId,
+      updatedId,
+      searchParams,
+    });
+
     if (draftId || updatedId) {
       const targetId = draftId || updatedId;
+      console.log("PostsContent: Setting highlighted post ID:", targetId);
       setHighlightedPostId(targetId || null);
 
       const message = draftId
@@ -220,15 +227,46 @@ export function PostsContent({
         : "Post updated successfully!";
       toast.success(message);
 
+      // Only refresh if the post is not found in current data
+      const postExists = data.posts.some((post) => post.id === targetId);
+      console.log("PostsContent: Post exists in current data:", postExists);
+
+      if (draftId && !postExists) {
+        console.log("PostsContent: Post not found, refreshing data...");
+        refetch().catch((error) => {
+          console.error("Failed to refresh posts after creation:", error);
+        });
+      }
+
+      // Scroll to highlighted post after a brief delay
       setTimeout(() => {
+        const highlightedElement = document.querySelector(
+          `[data-post-id="${targetId}"]`
+        );
+        console.log(
+          "PostsContent: Looking for element with data-post-id:",
+          targetId,
+          highlightedElement
+        );
+        if (highlightedElement) {
+          highlightedElement.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+          });
+        }
+      }, 500);
+
+      // Remove highlight and URL params after 5 seconds
+      setTimeout(() => {
+        console.log("PostsContent: Removing highlight for:", targetId);
         setHighlightedPostId(null);
         const newUrl = new URL(window.location.href);
         newUrl.searchParams.delete("draft");
         newUrl.searchParams.delete("updated");
         window.history.replaceState({}, "", newUrl.toString());
-      }, 3000);
+      }, 5000);
     }
-  }, [searchParams.draft, searchParams.updated]);
+  }, [searchParams.draft, searchParams.updated, data.posts]);
 
   useEffect(() => {
     let filtered = data.posts;
@@ -634,124 +672,113 @@ export function PostsContent({
     handleEdit(post);
   };
 
-  const renderPostCard = (post: Post) => (
-    <Card
-      key={post.id}
-      className={`hover:shadow-lg transition-all duration-500 ${
-        post.status === "used" ? "cursor-default" : "cursor-pointer"
-      } group h-full p-6 ${
-        post.needsAnalytics ? "ring-2 ring-red-200 border-red-200" : ""
-      } ${post.hasAnalytics ? "ring-1 ring-green-200 border-green-200" : ""} ${
-        highlightedPostId === post.id
-          ? "ring-2 ring-blue-400 border-blue-400 bg-blue-50"
-          : ""
-      }`}
-      onClick={() => handlePostClick(post)}
-    >
-      {highlightedPostId === post.id && (
-        <div className="mb-2">
-          <Badge className="bg-blue-100 text-blue-700 border-blue-200 text-xs">
-            {searchParams.draft ? "✨ Just Created" : "✨ Just Updated"}
-          </Badge>
-        </div>
-      )}
+  const renderPostCard = (post: Post) => {
+    const isHighlighted = highlightedPostId === post.id;
+    console.log(
+      `PostsContent: Rendering post ${post.id}, highlighted: ${isHighlighted}, highlightedPostId: ${highlightedPostId}`
+    );
 
-      <div className="flex items-start justify-between mb-3">
-        <div className="flex items-center gap-2 flex-wrap">
-          {getStatusBadge(
-            post.status,
-            post.needsAnalytics,
-            post.scheduled_date !== null
-          )}
-          <Badge variant="outline" className="text-xs">
-            {post.content_type || "Post"}
-          </Badge>
-          {post.hasAnalytics && (
-            <Badge
-              variant="outline"
-              className="text-xs bg-green-50 text-green-700 border-green-300"
-            >
-              📊 Analytics
+    return (
+      <Card
+        key={post.id}
+        data-post-id={post.id}
+        className={`hover:shadow-lg transition-all duration-500 ${
+          post.status === "used" ? "cursor-default" : "cursor-pointer"
+        } group h-full p-6 ${
+          post.needsAnalytics ? "ring-2 ring-red-200 border-red-200" : ""
+        } ${
+          post.hasAnalytics ? "ring-1 ring-green-200 border-green-200" : ""
+        } ${
+          isHighlighted
+            ? "ring-2 ring-blue-400 border-blue-400 bg-blue-50 animate-pulse"
+            : ""
+        }`}
+        onClick={() => handlePostClick(post)}
+      >
+        {isHighlighted && (
+          <div className="mb-2">
+            <Badge className="bg-blue-100 text-blue-700 border-blue-200 text-xs">
+              {searchParams.draft ? "✨ Just Created" : "✨ Just Updated"}
             </Badge>
+          </div>
+        )}
+
+        <div className="flex items-start justify-between mb-3">
+          <div className="flex items-center gap-2 flex-wrap">
+            {getStatusBadge(
+              post.status,
+              post.needsAnalytics,
+              post.scheduled_date !== null
+            )}
+            <Badge variant="outline" className="text-xs">
+              {post.content_type || "Post"}
+            </Badge>
+            {post.hasAnalytics && (
+              <Badge
+                variant="outline"
+                className="text-xs bg-green-50 text-green-700 border-green-300"
+              >
+                📊 Analytics
+              </Badge>
+            )}
+          </div>
+
+          {post.status === "used" && post.hasAnalytics && (
+            <BarChart3 className="h-4 w-4 text-green-600" />
           )}
         </div>
 
-        {post.status === "used" && post.hasAnalytics && (
-          <BarChart3 className="h-4 w-4 text-green-600" />
-        )}
-      </div>
+        <h3 className="font-semibold text-gray-900 mb-2 line-clamp-2">
+          {post.title || post.content.substring(0, 100) + "..."}
+        </h3>
 
-      <h3 className="font-semibold text-gray-900 mb-2 line-clamp-2">
-        {post.title || post.content.substring(0, 100) + "..."}
-      </h3>
+        <PostContentPreview content={post.content} />
 
-      <PostContentPreview content={post.content} />
-
-      {post.hasAnalytics && post.analyticsData && (
-        <div className="mb-3 p-2 bg-green-50 rounded-lg border border-green-200">
-          <div className="grid grid-cols-4 gap-2 text-xs">
-            <div className="text-center">
-              <div className="font-medium text-green-700">
-                {post.analyticsData.impressions.toLocaleString()}
+        {post.hasAnalytics && post.analyticsData && (
+          <div className="mb-3 p-2 bg-green-50 rounded-lg border border-green-200">
+            <div className="grid grid-cols-4 gap-2 text-xs">
+              <div className="text-center">
+                <div className="font-medium text-green-700">
+                  {post.analyticsData.impressions.toLocaleString()}
+                </div>
+                <div className="text-green-600">Views</div>
               </div>
-              <div className="text-green-600">Views</div>
-            </div>
-            <div className="text-center">
-              <div className="font-medium text-green-700">
-                {post.analyticsData.likes}
+              <div className="text-center">
+                <div className="font-medium text-green-700">
+                  {post.analyticsData.likes}
+                </div>
+                <div className="text-green-600">Likes</div>
               </div>
-              <div className="text-green-600">Likes</div>
-            </div>
-            <div className="text-center">
-              <div className="font-medium text-green-700">
-                {post.analyticsData.comments}
+              <div className="text-center">
+                <div className="font-medium text-green-700">
+                  {post.analyticsData.comments}
+                </div>
+                <div className="text-green-600">Comments</div>
               </div>
-              <div className="text-green-600">Comments</div>
-            </div>
-            <div className="text-center">
-              <div className="font-medium text-green-700">
-                {post.analyticsData.engagement_rate.toFixed(1)}%
+              <div className="text-center">
+                <div className="font-medium text-green-700">
+                  {post.analyticsData.engagement_rate.toFixed(1)}%
+                </div>
+                <div className="text-green-600">Engagement</div>
               </div>
-              <div className="text-green-600">Engagement</div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      <div className="flex items-center justify-between pt-3 border-t border-gray-100">
-        <div className="text-xs text-gray-500">
-          {post.status === "used" && post.posted_at ? (
-            <span>Posted {formatDate(post.posted_at)}</span>
-          ) : post.scheduled_date ? (
-            <span className="text-blue-600">
-              📅 Scheduled {formatDate(post.scheduled_date)}
-            </span>
-          ) : (
-            <span>Created {formatDate(post.created_at)}</span>
-          )}
-        </div>
+        <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+          <div className="text-xs text-gray-500">
+            {post.status === "used" && post.posted_at ? (
+              <span>Posted {formatDate(post.posted_at)}</span>
+            ) : post.scheduled_date ? (
+              <span className="text-blue-600">
+                📅 Scheduled {formatDate(post.scheduled_date)}
+              </span>
+            ) : (
+              <span>Created {formatDate(post.created_at)}</span>
+            )}
+          </div>
 
-        <div className="flex items-center gap-2">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleCopy(post.content);
-                }}
-                className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 p-0"
-              >
-                <Copy className="h-3 w-3" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Copy content to clipboard</p>
-            </TooltipContent>
-          </Tooltip>
-
-          {post.status === "draft" ? (
+          <div className="flex items-center gap-2">
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
@@ -759,185 +786,207 @@ export function PostsContent({
                   size="sm"
                   onClick={(e) => {
                     e.stopPropagation();
-                    handleMarkAsPosted(post.id);
+                    handleCopy(post.content);
                   }}
                   className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 p-0"
                 >
-                  <CheckCircle className="h-3 w-3" />
+                  <Copy className="h-3 w-3" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                <p>Mark as posted</p>
+                <p>Copy content to clipboard</p>
               </TooltipContent>
             </Tooltip>
-          ) : post.status === "used" && !post.hasAnalytics ? (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    openAnalyticsDialog(post);
-                  }}
-                  className={`opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 p-0 ${
-                    post.needsAnalytics
-                      ? "border-red-300 bg-red-50 hover:bg-red-100"
-                      : ""
-                  }`}
-                >
-                  <BarChart3
-                    className={`h-3 w-3 ${
-                      post.needsAnalytics ? "text-red-600" : ""
+
+            {post.status === "draft" ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleMarkAsPosted(post.id);
+                    }}
+                    className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 p-0"
+                  >
+                    <CheckCircle className="h-3 w-3" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Mark as posted</p>
+                </TooltipContent>
+              </Tooltip>
+            ) : post.status === "used" && !post.hasAnalytics ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openAnalyticsDialog(post);
+                    }}
+                    className={`opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 p-0 ${
+                      post.needsAnalytics
+                        ? "border-red-300 bg-red-50 hover:bg-red-100"
+                        : ""
                     }`}
-                  />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Add analytics</p>
-              </TooltipContent>
-            </Tooltip>
-          ) : post.status === "used" && post.hasAnalytics ? (
-            <Tooltip>
-              <TooltipTrigger asChild>
+                  >
+                    <BarChart3
+                      className={`h-3 w-3 ${
+                        post.needsAnalytics ? "text-red-600" : ""
+                      }`}
+                    />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Add analytics</p>
+                </TooltipContent>
+              </Tooltip>
+            ) : post.status === "used" && post.hasAnalytics ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                    }}
+                    className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 p-0"
+                  >
+                    <BarChart3 className="h-3 w-3 text-green-600" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>View analytics</p>
+                </TooltipContent>
+              </Tooltip>
+            ) : null}
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                  }}
+                  onClick={(e) => e.stopPropagation()}
                   className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 p-0"
                 >
-                  <BarChart3 className="h-3 w-3 text-green-600" />
+                  <MoreHorizontal className="h-3 w-3" />
                 </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>View analytics</p>
-              </TooltipContent>
-            </Tooltip>
-          ) : null}
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => handleEdit(post)}>
+                  <Edit className="h-4 w-4 mr-2" />
+                  Edit Post
+                </DropdownMenuItem>
 
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={(e) => e.stopPropagation()}
-                className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 p-0"
-              >
-                <MoreHorizontal className="h-3 w-3" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => handleEdit(post)}>
-                <Edit className="h-4 w-4 mr-2" />
-                Edit Post
-              </DropdownMenuItem>
-
-              {post.scheduled_date ? (
-                <DropdownMenuItem
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSelectedPost(post);
-                    // If it's already in YYYY-MM-DD format, use it directly
-                    if (
-                      post.scheduled_date &&
-                      /^\d{4}-\d{2}-\d{2}$/.test(post.scheduled_date)
-                    ) {
-                      setSelectedDate(post.scheduled_date);
-                    } else if (post.scheduled_date) {
-                      // Convert ISO datetime to YYYY-MM-DD format
-                      const dateOnly = post.scheduled_date.split("T")[0] ?? "";
-                      setSelectedDate(dateOnly);
-                    } else {
+                {post.scheduled_date ? (
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedPost(post);
+                      // If it's already in YYYY-MM-DD format, use it directly
+                      if (
+                        post.scheduled_date &&
+                        /^\d{4}-\d{2}-\d{2}$/.test(post.scheduled_date)
+                      ) {
+                        setSelectedDate(post.scheduled_date);
+                      } else if (post.scheduled_date) {
+                        // Convert ISO datetime to YYYY-MM-DD format
+                        const dateOnly =
+                          post.scheduled_date.split("T")[0] ?? "";
+                        setSelectedDate(dateOnly);
+                      } else {
+                        setSelectedDate("");
+                      }
+                      setDateEditDialogOpen(true);
+                    }}
+                  >
+                    <Calendar className="h-4 w-4 mr-2" />
+                    Edit Schedule
+                  </DropdownMenuItem>
+                ) : (
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedPost(post);
                       setSelectedDate("");
-                    }
-                    setDateEditDialogOpen(true);
-                  }}
-                >
-                  <Calendar className="h-4 w-4 mr-2" />
-                  Edit Schedule
-                </DropdownMenuItem>
-              ) : (
+                      setDateEditDialogOpen(true);
+                    }}
+                  >
+                    <Calendar className="h-4 w-4 mr-2" />
+                    Schedule Post
+                  </DropdownMenuItem>
+                )}
+
+                {post.status === "draft" && (
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleMarkAsPosted(post.id);
+                    }}
+                  >
+                    <CheckCircle className="h-4 w-4 mr-2" />
+                    Mark as Posted
+                  </DropdownMenuItem>
+                )}
+
+                {post.status === "used" && !post.hasAnalytics && (
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openAnalyticsDialog(post);
+                    }}
+                  >
+                    <BarChart3 className="h-4 w-4 mr-2" />
+                    Add Analytics
+                  </DropdownMenuItem>
+                )}
+
+                <DropdownMenuSeparator />
+
                 <DropdownMenuItem
                   onClick={(e) => {
                     e.stopPropagation();
-                    setSelectedPost(post);
-                    setSelectedDate("");
-                    setDateEditDialogOpen(true);
+                    handleCopy(post.content);
                   }}
                 >
-                  <Calendar className="h-4 w-4 mr-2" />
-                  Schedule Post
+                  <Copy className="h-4 w-4 mr-2" />
+                  Copy Content
                 </DropdownMenuItem>
-              )}
 
-              {post.status === "draft" && (
+                {post.linkedin_url && (
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      window.open(post.linkedin_url || "", "_blank");
+                    }}
+                  >
+                    <ExternalLink className="h-4 w-4 mr-2" />
+                    View on LinkedIn
+                  </DropdownMenuItem>
+                )}
+
+                <DropdownMenuSeparator />
+
                 <DropdownMenuItem
                   onClick={(e) => {
                     e.stopPropagation();
-                    handleMarkAsPosted(post.id);
+                    handleDelete(post.id);
                   }}
+                  className="text-red-600 focus:text-red-600"
                 >
-                  <CheckCircle className="h-4 w-4 mr-2" />
-                  Mark as Posted
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete Post
                 </DropdownMenuItem>
-              )}
-
-              {post.status === "used" && !post.hasAnalytics && (
-                <DropdownMenuItem
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    openAnalyticsDialog(post);
-                  }}
-                >
-                  <BarChart3 className="h-4 w-4 mr-2" />
-                  Add Analytics
-                </DropdownMenuItem>
-              )}
-
-              <DropdownMenuSeparator />
-
-              <DropdownMenuItem
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleCopy(post.content);
-                }}
-              >
-                <Copy className="h-4 w-4 mr-2" />
-                Copy Content
-              </DropdownMenuItem>
-
-              {post.linkedin_url && (
-                <DropdownMenuItem
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    window.open(post.linkedin_url || "", "_blank");
-                  }}
-                >
-                  <ExternalLink className="h-4 w-4 mr-2" />
-                  View on LinkedIn
-                </DropdownMenuItem>
-              )}
-
-              <DropdownMenuSeparator />
-
-              <DropdownMenuItem
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDelete(post.id);
-                }}
-                className="text-red-600 focus:text-red-600"
-              >
-                <Trash2 className="h-4 w-4 mr-2" />
-                Delete Post
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
-      </div>
-    </Card>
-  );
+      </Card>
+    );
+  };
 
   return (
     <div className="p-6">

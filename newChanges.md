@@ -1,0 +1,1 @@
+## Thinking we should add something to remind the user why they’re here, and include their ideal customer and their content strategy. Something like the below on the dashboard below the metrics that’s collapsable 

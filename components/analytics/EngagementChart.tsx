@@ -2,21 +2,34 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TrendingUp, TrendingDown, Minus } from "lucide-react";
-import { useAnalytics } from "@/hooks/useAnalytics";
 
-export function EngagementChart() {
-  const { engagementData, loading } = useAnalytics();
+interface EngagementData {
+  date: string;
+  engagement: number;
+  impressions: number;
+}
 
-  if (loading) {
-    return (
-      <div className="h-64 bg-gray-50 rounded flex items-center justify-center animate-pulse">
-        <div className="text-center text-gray-500">
-          <TrendingUp className="h-12 w-12 mx-auto mb-2 opacity-30" />
-          <p>Loading chart data...</p>
-        </div>
-      </div>
-    );
-  }
+interface Post {
+  id: string;
+  engagement_rate: number;
+  posted_at?: string;
+  impressions?: number;
+}
+
+interface EngagementChartProps {
+  data: Post[];
+}
+
+export function EngagementChart({ data }: EngagementChartProps) {
+  // Transform the posts data into engagement data
+  const engagementData: EngagementData[] = data
+    .filter((post) => post.posted_at && post.engagement_rate)
+    .map((post) => ({
+      date: post.posted_at!,
+      engagement: post.engagement_rate,
+      impressions: post.impressions || 0,
+    }))
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
   if (!engagementData || engagementData.length === 0) {
     return (

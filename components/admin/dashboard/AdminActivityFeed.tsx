@@ -194,7 +194,7 @@ export default function AdminActivityFeed({
 
       {activities.length >= 10 && (
         <div className="mt-4 pt-4 border-t border-gray-200">
-          <button className="w-full text-center text-sm text-blue-600 hover:text-blue-700 font-medium py-2 px-4 rounded-lg hover:bg-blue-50 transition-colors duration-200">
+          <button className="w-full text-center text-sm text-blue-600 hover:text-blue-700 font-medium py-2 px-4 rounded-lg hover:bg-blue-50 transition-colors duration-200 cursor-pointer">
             View all activity →
           </button>
         </div>

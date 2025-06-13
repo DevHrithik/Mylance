@@ -72,6 +72,7 @@ export function ContentCalendarContent({
         .select("*")
         .eq("user_id", userId)
         .eq("pushed_to_calendar", true)
+        .order("scheduled_date", { ascending: true, nullsFirst: true })
         .order("created_at", { ascending: false });
 
       if (promptsError) {
@@ -144,4 +145,3 @@ export function ContentCalendarContent({
     </div>
   );
 }
- 

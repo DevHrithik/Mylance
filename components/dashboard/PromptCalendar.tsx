@@ -171,54 +171,60 @@ export function PromptCalendar({
       (prompt) => prompt.scheduled_date && prompt.pushed_to_calendar === true
     );
 
-    const datesWithPrompts = new Set(
-      filteredPrompts.map((prompt) => prompt.scheduled_date!)
-    );
+    // Get all unique weeks that have prompts
+    const weeksWithPrompts = new Set<string>();
+    filteredPrompts.forEach((prompt) => {
+      const date = new Date(prompt.scheduled_date! + "T00:00:00Z");
+      // Get Monday of this week (week start)
+      const dayOfWeek = date.getUTCDay();
+      const monday = new Date(date);
+      monday.setUTCDate(date.getUTCDate() - dayOfWeek + 1);
+      const weekKey = `${monday.getUTCFullYear()}-${String(
+        monday.getUTCMonth() + 1
+      ).padStart(2, "0")}-${String(monday.getUTCDate()).padStart(2, "0")}`;
+      weeksWithPrompts.add(weekKey);
+    });
 
-    // Convert to DayWithPrompts objects and sort by date
-    const daysWithPrompts: DayWithPrompts[] = Array.from(datesWithPrompts)
-      .map((dateString) => {
-        // Parse date string as UTC to avoid timezone shifts
-        const dateParts = dateString.split("-").map(Number);
+    // Generate all Monday-Wednesday-Friday combinations for weeks that have prompts
+    const daysWithPrompts: DayWithPrompts[] = [];
 
-        let date: Date;
+    // Convert to array and sort weeks
+    const sortedWeeks = Array.from(weeksWithPrompts).sort();
 
-        // Validate that we have exactly 3 parts and all are valid numbers
-        if (dateParts.length !== 3 || dateParts.some(isNaN)) {
-          console.error(`Invalid date string: ${dateString}`);
-          // Fallback to current date if invalid
-          const fallbackDate = new Date();
-          const year = fallbackDate.getFullYear();
-          const month = fallbackDate.getMonth() + 1;
-          const day = fallbackDate.getDate();
-          date = new Date(Date.UTC(year, month - 1, day));
-        } else {
-          const year = dateParts[0]!;
-          const month = dateParts[1]!;
-          const day = dateParts[2]!;
-          date = new Date(Date.UTC(year, month - 1, day));
-        }
+    sortedWeeks.forEach((weekStart) => {
+      const mondayDate = new Date(weekStart + "T00:00:00Z");
 
+      // Generate Monday, Wednesday, Friday for this week
+      const postingDays = [0, 2, 4]; // Monday, Wednesday, Friday (offset from Monday)
+
+      postingDays.forEach((dayOffset) => {
+        const currentDate = new Date(mondayDate);
+        currentDate.setUTCDate(mondayDate.getUTCDate() + dayOffset);
+
+        const dateString = `${currentDate.getUTCFullYear()}-${String(
+          currentDate.getUTCMonth() + 1
+        ).padStart(2, "0")}-${String(currentDate.getUTCDate()).padStart(
+          2,
+          "0"
+        )}`;
+
+        // Get prompts for this specific date
         const dayPrompts = filteredPrompts.filter(
           (prompt) => prompt.scheduled_date === dateString
         );
 
-        const dayName = weekDays[date.getUTCDay()];
-        const monthName = monthNames[date.getUTCMonth()];
+        const dayName = weekDays[currentDate.getUTCDay()];
+        const monthName = monthNames[currentDate.getUTCMonth()];
 
-        return {
+        daysWithPrompts.push({
           date: dateString,
           dayName: dayName || "Unknown",
-          dayNumber: date.getUTCDate(),
+          dayNumber: currentDate.getUTCDate(),
           monthName: monthName || "Unknown",
           prompts: dayPrompts,
-        };
-      })
-      .sort(
-        (a, b) =>
-          new Date(a.date + "T00:00:00Z").getTime() -
-          new Date(b.date + "T00:00:00Z").getTime()
-      );
+        });
+      });
+    });
 
     return daysWithPrompts;
   };
@@ -270,23 +276,43 @@ export function PromptCalendar({
   const formatPageInfo = () => {
     if (allDaysWithPrompts.length === 0) return "No scheduled prompts";
 
-    // Get the first and last dates of the current page
+    // Get the first and last dates of the current page (should be 3 days: Mon, Wed, Fri)
     const firstDay = currentDays[0];
     const lastDay = currentDays[currentDays.length - 1];
 
     if (!firstDay || !lastDay) return "No scheduled prompts";
 
-    // Parse dates to get readable format
+    // Since we now show Monday-Wednesday-Friday in groups of 3,
+    // we want to show the week range
     const firstDate = new Date(firstDay.date + "T00:00:00Z");
     const lastDate = new Date(lastDay.date + "T00:00:00Z");
 
-    // Format as "Week of Jun 10" or "Jun 10-12" if different dates
-    if (firstDay.date === lastDay.date) {
-      return `${firstDay.monthName} ${firstDay.dayNumber}`;
-    } else if (firstDay.monthName === lastDay.monthName) {
-      return `${firstDay.monthName} ${firstDay.dayNumber}-${lastDay.dayNumber}`;
+    // Check if this is a complete week (Mon-Wed-Fri of same week)
+    const firstMonday = new Date(firstDate);
+    const firstDayOfWeek = firstDate.getUTCDay();
+    firstMonday.setUTCDate(firstDate.getUTCDate() - firstDayOfWeek + 1);
+
+    const lastMonday = new Date(lastDate);
+    const lastDayOfWeek = lastDate.getUTCDay();
+    lastMonday.setUTCDate(lastDate.getUTCDate() - lastDayOfWeek + 1);
+
+    // If both dates are in the same week, show "Week of [Monday date]"
+    if (firstMonday.getTime() === lastMonday.getTime()) {
+      const mondayNum = firstMonday.getUTCDate();
+      const monthName = monthNames[firstMonday.getUTCMonth()];
+      return `${monthName} ${mondayNum}-${mondayNum + 4}`;
     } else {
-      return `${firstDay.monthName} ${firstDay.dayNumber} - ${lastDay.monthName} ${lastDay.dayNumber}`;
+      // Multiple weeks, show range
+      const firstMondayNum = firstMonday.getUTCDate();
+      const lastFridayNum = lastMonday.getUTCDate() + 4;
+      const firstMonth = monthNames[firstMonday.getUTCMonth()];
+      const lastMonth = monthNames[lastMonday.getUTCMonth()];
+
+      if (firstMonth === lastMonth) {
+        return `${firstMonth} ${firstMondayNum}-${lastFridayNum}`;
+      } else {
+        return `${firstMonth} ${firstMondayNum} - ${lastMonth} ${lastFridayNum}`;
+      }
     }
   };
 
@@ -620,14 +646,14 @@ export function PromptCalendar({
                   {/* First Prompt */}
                   {day.prompts[0] ? (
                     <PromptCard prompt={day.prompts[0]} index={0} />
-                            ) : (
+                  ) : (
                     <EmptyPromptCard slotText="for this slot" />
                   )}
 
                   {/* Second Prompt */}
                   {day.prompts[1] ? (
                     <PromptCard prompt={day.prompts[1]} index={1} />
-                            ) : (
+                  ) : (
                     <EmptyPromptCard slotText="for the day" />
                   )}
                 </div>

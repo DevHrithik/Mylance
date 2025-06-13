@@ -12,6 +12,13 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import type { DashboardData } from "@/lib/supabase/server-queries";
+import {
+  Accordion,
+  AccordionItem,
+  AccordionTrigger,
+  AccordionContent,
+} from "@/components/ui/accordion";
+import { useFullProfile } from "@/lib/supabase/useFullProfile";
 
 interface CalendarEvent {
   date: string;
@@ -38,6 +45,12 @@ export function DashboardContent({
 
   const router = useRouter();
   const supabase = createClient();
+
+  const {
+    profile: fullProfile,
+    loading: profileLoading,
+    error: profileError,
+  } = useFullProfile(userId);
 
   // Check profile lock status
   useEffect(() => {
@@ -211,6 +224,79 @@ export function DashboardContent({
             dayStreak: 1, // Mock for now
           }}
         />
+
+        {/* Content Game Plan Accordion */}
+        <Accordion type="single" collapsible className="mb-6">
+          <AccordionItem value="game-plan">
+            <AccordionTrigger className="text-lg font-semibold flex items-center gap-2 px-4 py-3 bg-gradient-to-r from-blue-50 to-pink-50 border-l-4 border-blue-400 rounded-t-xl shadow-sm hover:bg-blue-100 transition-colors duration-200">
+              <span className="flex items-center gap-2">
+                <span className="inline-block bg-blue-100 text-blue-600 rounded-full p-1 mr-2 shadow-sm">
+                  <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
+                    <path
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      d="M12 19V5m0 0-7 7m7-7 7 7"
+                    />
+                  </svg>
+                </span>
+                Your Content Game Plan
+              </span>
+            </AccordionTrigger>
+            <AccordionContent className="space-y-4 bg-white border-x border-b border-blue-100 rounded-b-xl shadow-md transition-all duration-300 p-6">
+              {profileLoading ? (
+                <div className="text-center text-gray-500 py-4">
+                  Loading your content game plan...
+                </div>
+              ) : profileError ? (
+                <div className="text-center text-red-500 py-4">
+                  Failed to load your content game plan.
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="bg-pink-50 border border-pink-200 rounded-lg p-3">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-semibold">
+                          📋 Content Strategy
+                        </span>
+                      </div>
+                      <div className="text-sm text-gray-700">
+                        {fullProfile?.content_strategy ||
+                          "No content strategy set yet. Complete your profile to get a personalized strategy."}
+                      </div>
+                    </div>
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-semibold">👥 Ideal Customer</span>
+                      </div>
+                      <div className="text-sm text-gray-700">
+                        {fullProfile?.ideal_target_client ||
+                          "No ideal customer set yet."}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 mt-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => router.push("/profile")}
+                    >
+                      Update Strategy
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => router.push("/analytics")}
+                    >
+                      View Analytics
+                    </Button>
+                  </div>
+                </>
+              )}
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
+        {/* End Content Game Plan Accordion */}
 
         <div className="space-y-6">
           <CalendarLegend

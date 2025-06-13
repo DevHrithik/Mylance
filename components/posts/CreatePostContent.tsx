@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -112,6 +112,9 @@ export function CreatePostContent({
     null
   );
 
+  // Add debouncing for edit tracking
+  const editTrackingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   // Process initial data
   useEffect(() => {
     if (initialData) {
@@ -123,13 +126,13 @@ export function CreatePostContent({
           postData.generation_metadata?.voice_personalization_used || false
         );
 
-        // Extract category from generation metadata if available
+        // Extract category with optimized mapping
         let originalCategory =
           postData.generation_metadata?.original_category ||
           "Educational how-to post";
 
-        // Map old stored category values to new database constraint values
-        const categoryMapping: { [key: string]: string } = {
+        // Simple category mapping for performance
+        const categoryMapping: Record<string, string> = {
           educational: "Educational how-to post",
           "first-person-anecdote": "First-person anecdote",
           story: "First-person anecdote",
@@ -137,26 +140,19 @@ export function CreatePostContent({
           "thought-leadership": "Thought leadership/opinion piece",
           "case-study": "Case study/success story",
           question: "Engagement-driven question",
-          promotional: "Case study/success story", // fallback
-          personal: "First-person anecdote", // fallback
+          promotional: "Case study/success story",
+          personal: "First-person anecdote",
         };
 
-        // Use mapping if the stored value is in old format
-        if (categoryMapping[originalCategory]) {
-          originalCategory = categoryMapping[originalCategory];
-        }
+        // Use mapping if needed
+        originalCategory =
+          categoryMapping[originalCategory] || originalCategory;
 
-        // Try to get the original hook from multiple sources
-        let originalHook = "";
-
-        // First, check if hook is stored in generation metadata
-        if (postData.generation_metadata?.parameters?.hook) {
-          originalHook = postData.generation_metadata.parameters.hook;
-        }
-        // Then check ai_prompt_used field
-        else if (postData.ai_prompt_used) {
-          originalHook = postData.ai_prompt_used;
-        }
+        // Extract original hook efficiently
+        const originalHook =
+          postData.generation_metadata?.parameters?.hook ||
+          postData.ai_prompt_used ||
+          "";
 
         // Pre-fill form with existing post data
         setFormData({
@@ -166,7 +162,7 @@ export function CreatePostContent({
           content: postData.content || "",
           length: postData.generation_metadata?.parameters?.length || "medium",
           scheduledDate: postData.scheduled_date || "",
-          manualMode: false, // Editing is always considered manual
+          manualMode: false,
         });
       } else if (initialData.type === "prompt") {
         const prompt = initialData.data;
@@ -282,12 +278,16 @@ export function CreatePostContent({
 
     setIsSaving(true);
     try {
-      // Track content edits before saving if content was modified
+      // Track content edits in background (non-blocking) if content was modified
       if (
         originalGeneratedContent &&
         formData.content !== originalGeneratedContent
       ) {
-        await handleContentEdit(formData.content);
+        // Fire and forget - don't wait for edit tracking to complete
+        handleContentEdit(formData.content).catch((error) => {
+          console.error("Background edit tracking failed:", error);
+          // Don't show error to user since this is background tracking
+        });
       }
 
       if (searchParams.edit) {
@@ -354,11 +354,11 @@ export function CreatePostContent({
   // Cleanup timeout on unmount
   useEffect(() => {
     return () => {
-      if (editTrackingTimeout) {
-        clearTimeout(editTrackingTimeout);
+      if (editTrackingTimeoutRef.current) {
+        clearTimeout(editTrackingTimeoutRef.current);
       }
     };
-  }, [editTrackingTimeout]);
+  }, []);
 
   const handleInputChange = (field: string, value: any) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -376,7 +376,7 @@ export function CreatePostContent({
         setEditTrackingTimeout(null);
       }
 
-      // Set new timeout to track edit after user stops typing for 2 seconds
+      // Set new timeout to track edit after user stops typing for 3 seconds
       const timeoutId = setTimeout(() => {
         // Double-check that content hasn't been tracked already
         if (value !== lastTrackedContent) {
@@ -388,7 +388,7 @@ export function CreatePostContent({
           setLastTrackedContent(value); // Mark this content as tracked
           handleContentEdit(value);
         }
-      }, 2000);
+      }, 3000);
 
       setEditTrackingTimeout(timeoutId);
     }
@@ -411,10 +411,14 @@ export function CreatePostContent({
       return;
     }
 
-    try {
-      console.log("Sending edit tracking request...");
-      // Track the edit for AI learning
-      const response = await fetch("/api/posts/track-edit", {
+    // Clear previous timeout to debounce rapid edits
+    if (editTrackingTimeoutRef.current) {
+      clearTimeout(editTrackingTimeoutRef.current);
+    }
+
+    // Make this completely non-blocking with debouncing
+    editTrackingTimeoutRef.current = setTimeout(() => {
+      fetch("/api/posts/track-edit", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -431,14 +435,16 @@ export function CreatePostContent({
           generation_history_id: generationHistoryId,
           edit_reason: "user_modification",
         }),
-      });
-
-      const result = await response.json();
-      console.log("Edit tracking response:", result);
-    } catch (error) {
-      console.error("Failed to track edit:", error);
-      // Don't show error to user since this is background tracking
-    }
+      })
+        .then((response) => response.json())
+        .then((result) => {
+          console.log("Edit tracking response:", result);
+        })
+        .catch((error) => {
+          console.error("Failed to track edit:", error);
+          // Don't show error to user since this is background tracking
+        });
+    }, 3000); // Increased debounce delay to 3 seconds to reduce API calls
   };
 
   return (

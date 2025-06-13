@@ -13,27 +13,46 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verify user authentication
+    // Verify user authentication with timeout
     const supabase = await createClient();
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
+    const authTimeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("Auth timeout")), 3000)
+    );
 
-    if (authError || !user) {
+    const authResult = (await Promise.race([
+      supabase.auth.getUser(),
+      authTimeout,
+    ])) as any;
+
+    if (authResult.error || !authResult.data?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const user = authResult.data.user;
+
     // Check if the user is requesting insights for themselves (or is admin)
     if (user.id !== userId) {
-      // Check if user is admin
-      const { data: adminUser, error: adminError } = await supabase
-        .from("admin_users")
-        .select("id")
-        .eq("user_id", user.id)
-        .single();
+      const adminTimeout = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Admin check timeout")), 2000)
+      );
 
-      if (adminError || !adminUser) {
+      try {
+        const adminResult = (await Promise.race([
+          supabase
+            .from("admin_users")
+            .select("id")
+            .eq("user_id", user.id)
+            .single(),
+          adminTimeout,
+        ])) as any;
+
+        if (adminResult.error || !adminResult.data) {
+          return NextResponse.json(
+            { error: "You can only generate insights for yourself" },
+            { status: 403 }
+          );
+        }
+      } catch (error) {
         return NextResponse.json(
           { error: "You can only generate insights for yourself" },
           { status: 403 }
@@ -43,8 +62,15 @@ export async function POST(request: NextRequest) {
 
     console.log(`Generating insights for user: ${userId}`);
 
-    // Generate and save insights
-    const insights = await generateAndSaveInsights(userId);
+    // Generate and save insights with timeout
+    const insightsTimeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("Insights generation timeout")), 30000)
+    );
+
+    const insights = (await Promise.race([
+      generateAndSaveInsights(userId),
+      insightsTimeout,
+    ])) as any;
 
     return NextResponse.json({
       success: true,

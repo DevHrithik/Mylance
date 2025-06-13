@@ -66,10 +66,17 @@ export function InsightsRegenerationModal({
 
   useEffect(() => {
     if (!isGenerating) {
-      // Reset everything when not generating
-      setCurrentStep(0);
-      setProgress(0);
-      setCompletedSteps([]);
+      // If generation stopped, complete the progress
+      if (progress > 0 && progress < 100) {
+        setProgress(100);
+        setCompletedSteps([0, 1, 2, 3]); // Mark all steps as completed
+        setCurrentStep(GENERATION_STEPS.length); // Set to completion state
+      } else {
+        // Reset everything when not generating and no progress
+        setCurrentStep(0);
+        setProgress(0);
+        setCompletedSteps([]);
+      }
       return;
     }
 
@@ -79,10 +86,10 @@ export function InsightsRegenerationModal({
 
     const progressInterval = setInterval(() => {
       setProgress((prev) => {
-        const newProgress = Math.min(prev + 2, 95); // Cap at 95% until completion
+        const newProgress = Math.min(prev + 3, 90); // Cap at 90% until API completion
         return newProgress;
       });
-    }, 100);
+    }, 150);
 
     const stepProgression = () => {
       if (stepIndex < totalSteps) {
@@ -93,10 +100,6 @@ export function InsightsRegenerationModal({
           stepIndex++;
           stepProgression();
         }, GENERATION_STEPS[stepIndex]?.duration || 0);
-      } else {
-        // All steps completed
-        setProgress(100);
-        clearInterval(progressInterval);
       }
     };
 
@@ -105,7 +108,7 @@ export function InsightsRegenerationModal({
     return () => {
       clearInterval(progressInterval);
     };
-  }, [isGenerating]);
+  }, [isGenerating, progress]);
 
   useEffect(() => {
     if (!isGenerating && progress === 100) {

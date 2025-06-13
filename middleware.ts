@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 // Cache for user profiles to reduce database calls
 const profileCache = new Map<string, { data: any; timestamp: number }>();
-const CACHE_DURATION = 100 * 60 * 1000; // 10 minutes - increased for better performance
+const CACHE_DURATION = 2 * 60 * 1000; // 2 minutes - optimized for better performance
 
 // Helper function to create response with Netlify-specific cache headers
 function createNetlifyResponse(
@@ -70,7 +70,7 @@ async function getCachedProfile(userId: string, supabase: any) {
       .single();
 
     const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error("Profile fetch timeout")), 5000)
+      setTimeout(() => reject(new Error("Profile fetch timeout")), 1500)
     );
 
     const { data, error } = await Promise.race([
@@ -163,7 +163,7 @@ export async function middleware(request: NextRequest) {
     // Get user with timeout to prevent hangs
     const userPromise = supabase.auth.getUser();
     const userTimeout = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error("User auth timeout")), 8000)
+      setTimeout(() => reject(new Error("User auth timeout")), 2000)
     );
 
     const result = await Promise.race([userPromise, userTimeout]);
@@ -227,17 +227,45 @@ export async function middleware(request: NextRequest) {
 
     // Fetch subscription status if onboarding is complete and not admin
     let hasActiveSubscription = false;
-    if (hasCompletedOnboarding && !isAdmin) {
-      const { data: subscription } = await supabase
-        .from("subscriptions")
-        .select("status, plan_type")
-        .eq("user_id", user.id)
-        .single();
-      hasActiveSubscription = !!(
-        subscription &&
-        subscription.status === "active" &&
-        subscription.plan_type === "monthly"
-      );
+
+    // Skip subscription check for fast-access routes to improve performance
+    const fastRoutes = ["/dashboard", "/profile", "/settings", "/posts/create"];
+    const isFastRoute = fastRoutes.some((route) => pathname.startsWith(route));
+
+    if (hasCompletedOnboarding && !isAdmin && !isFastRoute) {
+      try {
+        const subscriptionPromise = supabase
+          .from("subscriptions")
+          .select("status, plan_type")
+          .eq("user_id", user.id)
+          .single();
+
+        const subscriptionTimeout = new Promise((_, reject) =>
+          setTimeout(
+            () => reject(new Error("Subscription fetch timeout")),
+            1000
+          )
+        );
+
+        const { data: subscription } = await Promise.race([
+          subscriptionPromise,
+          subscriptionTimeout,
+        ]);
+
+        hasActiveSubscription = !!(
+          subscription &&
+          subscription.status === "active" &&
+          subscription.plan_type === "monthly"
+        );
+      } catch (error) {
+        console.error("Middleware: Subscription fetch failed:", error);
+        // Default to false, user will be redirected to product page if needed
+        hasActiveSubscription = false;
+      }
+    } else if (isFastRoute) {
+      // For fast routes, assume subscription is active to avoid delays
+      // The actual subscription check will happen on the page itself if needed
+      hasActiveSubscription = true;
     }
 
     // AUTO-LOGIN LOGIC STARTS HERE

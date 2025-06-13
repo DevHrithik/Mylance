@@ -65,6 +65,9 @@ interface LearningInsight {
   improvement: string;
 }
 
+const CACHE_KEY = (userId: string) => `ai_learning_progress_${userId}`;
+const CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+
 export default function AILearningProgress() {
   const { user } = useSimpleAuth();
   const [editStats, setEditStats] = useState<EditStats | null>(null);
@@ -76,34 +79,53 @@ export default function AILearningProgress() {
   const supabase = createClient();
 
   useEffect(() => {
-    if (user) {
-      fetchLearningData();
+    if (!user) return;
+    const cacheKey = CACHE_KEY(user.id);
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) {
+      const { data, timestamp } = JSON.parse(cached);
+      if (Date.now() - timestamp < CACHE_TTL) {
+        setEditStats(data.editStats);
+        setRecentEdits(data.recentEdits);
+        setLearningInsights(data.learningInsights);
+        setLoading(false);
+        return;
+      }
     }
-  }, [user]);
+    fetchLearningData();
+    // eslint-disable-next-line
+  }, [user?.id]);
 
   const fetchLearningData = async () => {
+    setLoading(true);
     try {
-      // Get user learning stats
       const { data: stats } = await supabase
         .from("user_learning_insights")
         .select("*")
         .eq("user_id", user?.id)
         .single();
-
       setEditStats(stats);
-
-      // Get recent edits
       const { data: edits } = await supabase
         .from("content_edits")
         .select("*")
         .eq("user_id", user?.id)
         .order("created_at", { ascending: false })
         .limit(10);
-
       setRecentEdits(edits || []);
-
-      // Generate learning insights based on user preferences and edit patterns
-      generateLearningInsights(stats, edits || []);
+      const insights = generateLearningInsights(stats, edits || []);
+      setLearningInsights(insights);
+      // Cache the result
+      localStorage.setItem(
+        CACHE_KEY(user?.id || ""),
+        JSON.stringify({
+          data: {
+            editStats: stats,
+            recentEdits: edits || [],
+            learningInsights: insights,
+          },
+          timestamp: Date.now(),
+        })
+      );
     } catch (error) {
       console.error("Error fetching learning data:", error);
     } finally {
@@ -187,6 +209,7 @@ export default function AILearningProgress() {
     }
 
     setLearningInsights(insights);
+    return insights;
   };
 
   const handleSeedSampleData = async () => {

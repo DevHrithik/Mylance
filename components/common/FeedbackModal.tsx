@@ -179,7 +179,7 @@ export function FeedbackModal({
                   key={star}
                   type="button"
                   onClick={() => setRating(star)}
-                  className="hover:scale-110 transition-transform"
+                  className="hover:scale-110 transition-transform cursor-pointer"
                 >
                   <Star
                     className={`h-6 w-6 ${

@@ -372,72 +372,109 @@ export const getAnalyticsData = unstable_cache(
     const supabase = createServiceClient();
 
     try {
+      // Parallel data fetching with faster timeouts
+      const timeoutPromise = (ms: number) =>
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Query timeout")), ms)
+        );
+
       const [postsResponse, performanceResponse, insightsResponse] =
-        await Promise.all([
-          supabase
-            .from("posts")
-            .select(
+        await Promise.allSettled([
+          Promise.race([
+            supabase
+              .from("posts")
+              .select(
+                `
+                id, title, content, posted_at, content_type, hashtags, status
               `
-            id, title, content, posted_at, content_type, hashtags, status
-          `
-            )
-            .eq("user_id", userId)
-            .eq("status", "used")
-            .not("posted_at", "is", null)
-            .order("posted_at", { ascending: false })
-            .limit(20),
+              )
+              .eq("user_id", userId)
+              .eq("status", "used")
+              .not("posted_at", "is", null)
+              .order("posted_at", { ascending: false })
+              .limit(20),
+            timeoutPromise(3000),
+          ]),
 
-          supabase
-            .from("post_performance")
-            .select(
+          Promise.race([
+            supabase
+              .from("post_performance")
+              .select(
+                `
+                post_id, impressions, likes, comments, shares, engagement_rate,
+                posts!inner(user_id, title, content, content_type, posted_at)
               `
-            post_id, impressions, likes, comments, shares, engagement_rate,
-            posts!inner(user_id, title, content, content_type, posted_at)
-          `
-            )
-            .eq("posts.user_id", userId)
-            .order("recorded_at", { ascending: false }),
+              )
+              .eq("posts.user_id", userId)
+              .order("recorded_at", { ascending: false }),
+            timeoutPromise(3000),
+          ]),
 
-          // Fetch real AI insights from the database
-          supabase
-            .from("ai_insights")
-            .select("*")
-            .eq("user_id", userId)
-            .eq("is_active", true)
-            .order("confidence_score", { ascending: false }),
+          Promise.race([
+            supabase
+              .from("ai_insights")
+              .select("*")
+              .eq("user_id", userId)
+              .eq("is_active", true)
+              .order("confidence_score", { ascending: false }),
+            timeoutPromise(2000),
+          ]),
         ]);
 
-      if (postsResponse.error) {
-        throw new Error(`Posts query error: ${postsResponse.error.message}`);
-      }
+      // Handle results with proper error checking
+      const posts =
+        postsResponse.status === "fulfilled" &&
+        !(postsResponse.value as any).error
+          ? (postsResponse.value as any).data || []
+          : [];
 
-      const posts = postsResponse.data || [];
-      const performanceData = performanceResponse.data || [];
-      const aiInsights = insightsResponse.data || [];
+      const performanceData =
+        performanceResponse.status === "fulfilled" &&
+        !(performanceResponse.value as any).error
+          ? (performanceResponse.value as any).data || []
+          : [];
+
+      const aiInsights =
+        insightsResponse.status === "fulfilled" &&
+        !(insightsResponse.value as any).error
+          ? (insightsResponse.value as any).data || []
+          : [];
+
+      // Log any errors for debugging
+      if (postsResponse.status === "rejected") {
+        console.error("Posts query failed:", postsResponse.reason);
+      }
+      if (performanceResponse.status === "rejected") {
+        console.error("Performance query failed:", performanceResponse.reason);
+      }
+      if (insightsResponse.status === "rejected") {
+        console.error("Insights query failed:", insightsResponse.reason);
+      }
 
       // Calculate stats from performance data
       const totalPosts = posts.length;
       const totalImpressions = performanceData.reduce(
-        (sum, perf) => sum + (perf.impressions || 0),
+        (sum: number, perf: any) => sum + (perf.impressions || 0),
         0
       );
       const totalLikes = performanceData.reduce(
-        (sum, perf) => sum + (perf.likes || 0),
+        (sum: number, perf: any) => sum + (perf.likes || 0),
         0
       );
       const totalComments = performanceData.reduce(
-        (sum, perf) => sum + (perf.comments || 0),
+        (sum: number, perf: any) => sum + (perf.comments || 0),
         0
       );
       const totalShares = performanceData.reduce(
-        (sum, perf) => sum + (perf.shares || 0),
+        (sum: number, perf: any) => sum + (perf.shares || 0),
         0
       );
 
       const averageEngagementRate =
         performanceData.length > 0
           ? performanceData.reduce(
-              (sum, perf) => sum + (Number(perf.engagement_rate) || 0),
+              (sum: number, perf: any) =>
+                sum + (Number(perf.engagement_rate) || 0),
               0
             ) / performanceData.length
           : 0;
@@ -445,9 +482,13 @@ export const getAnalyticsData = unstable_cache(
       // Find top performing posts
       const topPosts = performanceData
         .filter(
-          (perf) => perf.engagement_rate && Number(perf.engagement_rate) > 0
+          (perf: any) =>
+            perf.engagement_rate && Number(perf.engagement_rate) > 0
         )
-        .sort((a, b) => Number(b.engagement_rate) - Number(a.engagement_rate))
+        .sort(
+          (a: any, b: any) =>
+            Number(b.engagement_rate) - Number(a.engagement_rate)
+        )
         .slice(0, 5)
         .map((perf: any) => ({
           id: perf.post_id,
@@ -480,16 +521,19 @@ export const getAnalyticsData = unstable_cache(
         console.log("No insights found, generating basic content analysis...");
 
         // Analyze content types
-        const contentTypeAnalysis = performanceData.reduce((acc: any, perf) => {
-          const type = (perf.posts as any)?.content_type || "general";
-          if (!acc[type]) {
-            acc[type] = { count: 0, totalEngagement: 0, totalImpressions: 0 };
-          }
-          acc[type].count++;
-          acc[type].totalEngagement += Number(perf.engagement_rate) || 0;
-          acc[type].totalImpressions += perf.impressions || 0;
-          return acc;
-        }, {});
+        const contentTypeAnalysis = performanceData.reduce(
+          (acc: any, perf: any) => {
+            const type = (perf.posts as any)?.content_type || "general";
+            if (!acc[type]) {
+              acc[type] = { count: 0, totalEngagement: 0, totalImpressions: 0 };
+            }
+            acc[type].count++;
+            acc[type].totalEngagement += Number(perf.engagement_rate) || 0;
+            acc[type].totalImpressions += perf.impressions || 0;
+            return acc;
+          },
+          {}
+        );
 
         const bestContentType = Object.entries(contentTypeAnalysis).reduce(
           (best: any, [type, data]: any) => {
@@ -655,6 +699,7 @@ export const getPromptLibraryData = unstable_cache(
       .from("content_prompts")
       .select("*")
       .eq("user_id", userId)
+      .order("scheduled_date", { ascending: true, nullsFirst: false })
       .order("created_at", { ascending: false });
 
     if (error) {
