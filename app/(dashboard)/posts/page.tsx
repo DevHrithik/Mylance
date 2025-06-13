@@ -17,6 +17,8 @@ interface PostsPageProps {
     status?: string;
     type?: string;
     search?: string;
+    draft?: string;
+    updated?: string;
   }>;
 }
 
@@ -65,6 +67,8 @@ async function PostsServerWrapper({
     status?: string;
     type?: string;
     search?: string;
+    draft?: string;
+    updated?: string;
   };
 }) {
   try {

@@ -217,29 +217,77 @@ export function PostsContent({
       searchParams,
     });
 
-    if (draftId || updatedId) {
-      const targetId = draftId || updatedId;
-      console.log("PostsContent: Setting highlighted post ID:", targetId);
-      setHighlightedPostId(targetId || null);
+    // Check localStorage as fallback
+    let targetId = draftId || updatedId;
+    let highlightType = draftId ? "draft" : updatedId ? "updated" : null;
 
-      const message = draftId
-        ? "Post saved as draft successfully!"
-        : "Post updated successfully!";
-      toast.success(message);
+    if (!targetId) {
+      try {
+        const stored = localStorage.getItem("highlightPost");
+        if (stored) {
+          const highlight = JSON.parse(stored);
+          // Only use if within last 30 seconds
+          if (Date.now() - highlight.timestamp < 30000) {
+            targetId = highlight.id;
+            highlightType = highlight.type;
+            console.log(
+              "PostsContent: Using localStorage highlight:",
+              highlight
+            );
+          }
+          // Clean up localStorage
+          localStorage.removeItem("highlightPost");
+        }
+      } catch (error) {
+        console.error("Error reading localStorage highlight:", error);
+      }
+    }
+
+    if (targetId) {
+      console.log("PostsContent: Setting highlighted post ID:", targetId);
+      setHighlightedPostId(targetId);
+
+      const message =
+        highlightType === "draft"
+          ? "✨ Post saved as draft successfully! You can find it below."
+          : "✨ Post updated successfully! You can see your changes below.";
+      toast.success(message, {
+        duration: 4000,
+      });
 
       // Only refresh if the post is not found in current data
       const postExists = data.posts.some((post) => post.id === targetId);
       console.log("PostsContent: Post exists in current data:", postExists);
 
-      if (draftId && !postExists) {
+      if (highlightType === "draft" && !postExists) {
         console.log("PostsContent: Post not found, refreshing data...");
-        refetch().catch((error) => {
-          console.error("Failed to refresh posts after creation:", error);
-        });
+        // Use a timeout to call refresh after component initialization
+        setTimeout(async () => {
+          try {
+            const response = await fetch(
+              `/api/posts/refresh?userId=${userId}`,
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+              }
+            );
+
+            if (!response.ok) {
+              throw new Error("Failed to refresh posts");
+            }
+
+            const refreshedData = await response.json();
+            setData(refreshedData);
+          } catch (error) {
+            console.error("Failed to refresh posts after creation:", error);
+          }
+        }, 100);
       }
 
       // Scroll to highlighted post after a brief delay
-      setTimeout(() => {
+      const scrollToPost = () => {
         const highlightedElement = document.querySelector(
           `[data-post-id="${targetId}"]`
         );
@@ -253,18 +301,24 @@ export function PostsContent({
             behavior: "smooth",
             block: "center",
           });
+        } else {
+          // If not found, try again after a short delay
+          setTimeout(scrollToPost, 200);
         }
-      }, 500);
+      };
 
-      // Remove highlight and URL params after 5 seconds
+      setTimeout(scrollToPost, 300);
+
+      // Remove highlight and URL params after 8 seconds
       setTimeout(() => {
         console.log("PostsContent: Removing highlight for:", targetId);
         setHighlightedPostId(null);
-        const newUrl = new URL(window.location.href);
-        newUrl.searchParams.delete("draft");
-        newUrl.searchParams.delete("updated");
-        window.history.replaceState({}, "", newUrl.toString());
-      }, 5000);
+        // Clean up URL without triggering navigation
+        const url = new URL(window.location.href);
+        url.searchParams.delete("draft");
+        url.searchParams.delete("updated");
+        window.history.replaceState({}, "", url.toString());
+      }, 8000);
     }
   }, [searchParams.draft, searchParams.updated, data.posts]);
 
@@ -292,6 +346,7 @@ export function PostsContent({
 
   const sortedPosts = useMemo(() => {
     return [...filteredPosts].sort((a, b) => {
+      // Always put highlighted post at the very top
       if (highlightedPostId) {
         if (a.id === highlightedPostId) return -1;
         if (b.id === highlightedPostId) return 1;
@@ -690,16 +745,45 @@ export function PostsContent({
           post.hasAnalytics ? "ring-1 ring-green-200 border-green-200" : ""
         } ${
           isHighlighted
-            ? "ring-2 ring-blue-400 border-blue-400 bg-blue-50 animate-pulse"
+            ? "ring-4 ring-blue-500 border-blue-500 bg-gradient-to-r from-blue-50 to-indigo-50 shadow-xl transform scale-105 z-10 relative"
             : ""
         }`}
+        style={
+          isHighlighted
+            ? {
+                animation: "highlight-pulse 2s infinite ease-in-out",
+                position: "relative",
+                zIndex: 10,
+              }
+            : {}
+        }
         onClick={() => handlePostClick(post)}
       >
         {isHighlighted && (
-          <div className="mb-2">
-            <Badge className="bg-blue-100 text-blue-700 border-blue-200 text-xs">
-              {searchParams.draft ? "✨ Just Created" : "✨ Just Updated"}
+          <div className="mb-3 flex items-center gap-2">
+            <Badge className="bg-gradient-to-r from-blue-100 to-indigo-100 text-blue-800 border-blue-300 text-sm font-medium px-3 py-1 animate-bounce">
+              {(() => {
+                // Check URL params first
+                if (searchParams.draft) return "✨ Just Created!";
+                if (searchParams.updated) return "✨ Just Updated!";
+
+                // Fallback to localStorage check
+                try {
+                  const stored = localStorage.getItem("highlightPost");
+                  if (stored) {
+                    const highlight = JSON.parse(stored);
+                    return highlight.type === "draft"
+                      ? "✨ Just Created!"
+                      : "✨ Just Updated!";
+                  }
+                } catch (error) {
+                  console.error("Error reading localStorage for badge:", error);
+                }
+
+                return "✨ Recent Post!";
+              })()}
             </Badge>
+            <div className="flex-1 h-0.5 bg-gradient-to-r from-blue-300 to-transparent"></div>
           </div>
         )}
 

@@ -304,6 +304,19 @@ export function CreatePostContent({
 
         if (error) throw error;
 
+        console.log("Redirecting to updated post:", searchParams.edit);
+        toast.success("Post updated! Redirecting to your posts...");
+
+        // Store highlight info in localStorage as backup
+        localStorage.setItem(
+          "highlightPost",
+          JSON.stringify({
+            id: searchParams.edit,
+            type: "updated",
+            timestamp: Date.now(),
+          })
+        );
+
         router.push(`/posts?updated=${searchParams.edit}`);
       } else {
         // For new posts, we need to save the draft to database first
@@ -335,6 +348,19 @@ export function CreatePostContent({
           .single();
 
         if (error) throw error;
+
+        console.log("Redirecting to new draft post:", newPost.id);
+        toast.success("Post saved! Redirecting to your posts...");
+
+        // Store highlight info in localStorage as backup
+        localStorage.setItem(
+          "highlightPost",
+          JSON.stringify({
+            id: newPost.id,
+            type: "draft",
+            timestamp: Date.now(),
+          })
+        );
 
         router.push(`/posts?draft=${newPost.id}`);
       }
