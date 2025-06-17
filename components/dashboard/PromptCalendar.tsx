@@ -246,6 +246,56 @@ export function PromptCalendar({
     }
   }, [selectedDate, prompts]);
 
+  // Default to current week on initial load
+  useEffect(() => {
+    if (!selectedDate && prompts.length > 0) {
+      const allDays = getAllDaysWithPrompts();
+      if (allDays.length === 0) return;
+
+      // Get current date and find the Monday of current week
+      const today = new Date();
+      const currentDayOfWeek = today.getDay();
+      const daysToMonday = currentDayOfWeek === 0 ? 6 : currentDayOfWeek - 1; // Sunday = 6 days back to Monday
+      const currentMonday = new Date(today);
+      currentMonday.setDate(today.getDate() - daysToMonday);
+
+      const currentWeekMonday = `${currentMonday.getFullYear()}-${String(
+        currentMonday.getMonth() + 1
+      ).padStart(2, "0")}-${String(currentMonday.getDate()).padStart(2, "0")}`;
+
+      // Find the page that contains the current week
+      let currentWeekPageIndex = -1;
+      for (let i = 0; i < allDays.length; i += DAYS_PER_PAGE) {
+        const pageStartDay = allDays[i];
+        if (pageStartDay) {
+          const pageDate = new Date(pageStartDay.date + "T00:00:00");
+          const pageDayOfWeek = pageDate.getDay();
+          const pageDaysToMonday = pageDayOfWeek === 0 ? 6 : pageDayOfWeek - 1;
+          const pageMonday = new Date(pageDate);
+          pageMonday.setDate(pageDate.getDate() - pageDaysToMonday);
+
+          const pageMondayString = `${pageMonday.getFullYear()}-${String(
+            pageMonday.getMonth() + 1
+          ).padStart(2, "0")}-${String(pageMonday.getDate()).padStart(2, "0")}`;
+
+          if (pageMondayString >= currentWeekMonday) {
+            currentWeekPageIndex = Math.floor(i / DAYS_PER_PAGE);
+            break;
+          }
+        }
+      }
+
+      // If we found a current/future week, navigate to it
+      if (currentWeekPageIndex >= 0) {
+        setCurrentPage(currentWeekPageIndex);
+      } else {
+        // If no current/future week found, go to the last page
+        const totalPages = Math.ceil(allDays.length / DAYS_PER_PAGE);
+        setCurrentPage(Math.max(0, totalPages - 1));
+      }
+    }
+  }, [prompts.length, selectedDate]);
+
   const navigatePage = (direction: "prev" | "next") => {
     const allDays = getAllDaysWithPrompts();
     const totalPages = Math.ceil(allDays.length / DAYS_PER_PAGE);
@@ -320,7 +370,7 @@ export function PromptCalendar({
     prompt: ContentPrompt;
     index: number;
   }) => (
-    <Card className="border border-gray-200 bg-white flex flex-col h-[480px]">
+    <Card className="border border-gray-200 bg-white flex flex-col min-h-[480px]">
       <CardContent className="p-4 flex flex-col h-full">
         {/* Upper section - fixed height */}
         <div className="flex-shrink-0 space-y-3">
@@ -416,52 +466,14 @@ export function PromptCalendar({
         {/* Content section - flexible height */}
         <div className="flex-1 min-h-0 space-y-3 mt-3">
           {/* Hook */}
-          <div>
+          <div className="flex-shrink-0">
             <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
               HOOK
             </div>
-            <div className="max-h-20 overflow-hidden">
+            <div>
               <p className="text-sm text-gray-900 leading-relaxed">
                 {prompt.hook}
               </p>
-              {prompt.hook.length > 80 && (
-                <div className="text-xs text-gray-500 mt-1">
-                  <Dialog>
-                    <DialogTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-auto p-0 text-blue-600 hover:text-blue-800"
-                      >
-                        Read more...
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-                      <DialogHeader>
-                        <DialogTitle>Full Content</DialogTitle>
-                      </DialogHeader>
-                      <div className="space-y-4">
-                        <div>
-                          <h4 className="font-semibold text-gray-600 uppercase tracking-wide mb-2">
-                            HOOK
-                          </h4>
-                          <p className="text-sm text-gray-900 leading-relaxed">
-                            {prompt.hook}
-                          </p>
-                        </div>
-                        <div>
-                          <h4 className="font-semibold text-gray-600 uppercase tracking-wide mb-2">
-                            PROMPT
-                          </h4>
-                          <p className="text-sm text-gray-700 leading-relaxed">
-                            {prompt.prompt_text}
-                          </p>
-                        </div>
-                      </div>
-                    </DialogContent>
-                  </Dialog>
-                </div>
-              )}
             </div>
           </div>
 
@@ -470,48 +482,10 @@ export function PromptCalendar({
             <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
               PROMPT
             </div>
-            <div className="max-h-40 overflow-hidden">
+            <div>
               <p className="text-sm text-gray-700 leading-relaxed">
                 {prompt.prompt_text}
               </p>
-              {prompt.prompt_text.length > 150 && (
-                <div className="text-xs text-gray-500 mt-1">
-                  <Dialog>
-                    <DialogTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-auto p-0 text-blue-600 hover:text-blue-800"
-                      >
-                        Read more...
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-                      <DialogHeader>
-                        <DialogTitle>Full Content</DialogTitle>
-                      </DialogHeader>
-                      <div className="space-y-4">
-                        <div>
-                          <h4 className="font-semibold text-gray-600 uppercase tracking-wide mb-2">
-                            HOOK
-                          </h4>
-                          <p className="text-sm text-gray-900 leading-relaxed">
-                            {prompt.hook}
-                          </p>
-                        </div>
-                        <div>
-                          <h4 className="font-semibold text-gray-600 uppercase tracking-wide mb-2">
-                            PROMPT
-                          </h4>
-                          <p className="text-sm text-gray-700 leading-relaxed">
-                            {prompt.prompt_text}
-                          </p>
-                        </div>
-                      </div>
-                    </DialogContent>
-                  </Dialog>
-                </div>
-              )}
             </div>
           </div>
         </div>
@@ -534,7 +508,7 @@ export function PromptCalendar({
 
   // Component for empty prompt slot
   const EmptyPromptCard = ({ slotText }: { slotText: string }) => (
-    <Card className="border border-dashed border-gray-300 bg-gray-50 flex flex-col h-[480px]">
+    <Card className="border border-dashed border-gray-300 bg-gray-50 flex flex-col min-h-[480px]">
       <CardContent className="p-4 flex-1 flex items-center justify-center">
         <div className="text-center">
           <div className="text-sm text-gray-400 mb-1">No prompt</div>

@@ -84,11 +84,12 @@ export function useDashboardData(): UseDashboardDataReturn {
 
       if (postsError) throw postsError;
 
-      // Fetch prompts (only user-specific prompts)
+      // Fetch prompts (only user-specific prompts that are pushed to calendar)
       const { data: promptsData, error: promptsError } = await supabase
         .from("content_prompts")
         .select("*")
         .eq("user_id", user.id)
+        .eq("pushed_to_calendar", true)
         .order("scheduled_date", { ascending: true });
 
       if (promptsError) throw promptsError;

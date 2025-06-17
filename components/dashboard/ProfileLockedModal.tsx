@@ -14,6 +14,7 @@ import {
   ExternalLink,
   LogOut,
   Lock,
+  Check,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -75,6 +76,44 @@ export function ProfileLockedModal({
       }
 
       toast.success("Profile unlocked! Welcome to Mylance!");
+      onProfileUnlocked();
+    } catch (err: any) {
+      console.error("Profile unlock error:", err);
+      toast.error("Failed to unlock profile");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleAlreadyBookedCall = async () => {
+    setIsLoading(true);
+    try {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError || !user) {
+        throw new Error("User not authenticated");
+      }
+
+      // Unlock the profile and mark onboarding as completed
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .update({
+          profile_locked: false,
+          onboarding_completed: true,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", user.id);
+
+      if (profileError) {
+        console.error("Profile unlock error:", profileError);
+        toast.error("Failed to unlock profile");
+        return;
+      }
+
+      toast.success("Welcome to Mylance! Your profile has been unlocked.");
       onProfileUnlocked();
     } catch (err: any) {
       console.error("Profile unlock error:", err);
@@ -245,6 +284,16 @@ export function ProfileLockedModal({
                     >
                       <ExternalLink className="h-4 w-4 mr-2" />
                       Open Booking in New Window
+                    </Button>
+
+                    <Button
+                      onClick={handleAlreadyBookedCall}
+                      disabled={isLoading}
+                      variant="outline"
+                      className="w-full border-green-300 text-green-700 hover:bg-green-50 py-2"
+                    >
+                      <Check className="h-4 w-4 mr-2" />
+                      {isLoading ? "Processing..." : "I Already Booked a Call"}
                     </Button>
                   </div>
                 )}

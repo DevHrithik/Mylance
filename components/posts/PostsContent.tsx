@@ -30,6 +30,7 @@ import {
   Copy,
   Edit,
   Archive,
+  ArchiveRestore,
   Trash2,
   Calendar,
   BarChart3,
@@ -172,6 +173,7 @@ export function PostsContent({
   const [filteredPosts, setFilteredPosts] = useState(initialData.posts);
   const [analyticsDialogOpen, setAnalyticsDialogOpen] = useState(false);
   const [dateEditDialogOpen, setDateEditDialogOpen] = useState(false);
+  const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [selectedDate, setSelectedDate] = useState("");
   const [analyticsData, setAnalyticsData] = useState<PostPerformance>({
@@ -181,6 +183,7 @@ export function PostsContent({
     shares: 0,
     notes: "",
   });
+  const [postToArchive, setPostToArchive] = useState<Post | null>(null);
 
   const [highlightedPostId, setHighlightedPostId] = useState<string | null>(
     null
@@ -196,6 +199,7 @@ export function PostsContent({
     searchParams.status || "all"
   );
   const [typeFilter, setTypeFilter] = useState(searchParams.type || "all");
+  const [needsAnalyticsFilter, setNeedsAnalyticsFilter] = useState(false);
 
   const supabase = createClient();
   const router = useRouter();
@@ -347,7 +351,10 @@ export function PostsContent({
       );
     }
 
-    if (statusFilter !== "all") {
+    if (needsAnalyticsFilter) {
+      // Filter for posts that need analytics (used posts without analytics)
+      filtered = filtered.filter((post) => post.needsAnalytics === true);
+    } else if (statusFilter !== "all") {
       filtered = filtered.filter((post) => post.status === statusFilter);
     }
 
@@ -356,7 +363,7 @@ export function PostsContent({
     }
 
     setFilteredPosts(filtered);
-  }, [data.posts, searchTerm, statusFilter, typeFilter]);
+  }, [data.posts, searchTerm, statusFilter, typeFilter, needsAnalyticsFilter]);
 
   const sortedPosts = useMemo(() => {
     return [...filteredPosts].sort((a, b) => {
@@ -375,9 +382,11 @@ export function PostsContent({
       const bScheduled =
         b.scheduled_date && new Date(b.scheduled_date) >= today;
 
+      // Prioritize scheduled posts for future dates
       if (aScheduled && !bScheduled) return -1;
       if (!aScheduled && bScheduled) return 1;
 
+      // For scheduled posts, sort by schedule date (earliest first)
       if (aScheduled && bScheduled) {
         return (
           new Date(a.scheduled_date!).getTime() -
@@ -385,12 +394,15 @@ export function PostsContent({
         );
       }
 
+      // Prioritize drafts over other non-scheduled posts
       if (a.status === "draft" && b.status !== "draft") return -1;
       if (a.status !== "draft" && b.status === "draft") return 1;
 
-      return (
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      );
+      // For all other posts, sort by the most relevant date (latest first)
+      const aDate = a.posted_at || a.updated_at || a.created_at;
+      const bDate = b.posted_at || b.updated_at || b.created_at;
+
+      return new Date(bDate).getTime() - new Date(aDate).getTime();
     });
   }, [filteredPosts, highlightedPostId]);
 
@@ -496,9 +508,14 @@ export function PostsContent({
           status: "used",
           posted_at: new Date().toISOString(),
         })
-        .eq("id", postId);
+        .eq("id", parseInt(postId));
 
       if (error) throw error;
+
+      // Revalidate the posts cache to ensure data persists
+      await fetch(`/api/posts/refresh?userId=${userId}`, {
+        method: "POST",
+      });
 
       setData((prevData) => ({
         ...prevData,
@@ -516,7 +533,6 @@ export function PostsContent({
           ...prevData.stats,
           draftPosts: prevData.stats.draftPosts - 1,
           publishedPosts: prevData.stats.publishedPosts + 1,
-          postsNeedingAnalytics: prevData.stats.postsNeedingAnalytics + 1,
         },
       }));
 
@@ -524,21 +540,28 @@ export function PostsContent({
     } catch (error) {
       console.error("Error marking post as posted:", error);
       toast.error("Failed to mark post as posted");
-      handleAuthError(error);
     }
   };
 
   const handleEdit = (post: Post) => {
-    router.push(`/posts/create?edit=${post.id}`);
+    window.location.href = `/posts/edit/${post.id}`;
   };
 
   const handleDelete = async (postId: string) => {
     if (!confirm("Are you sure you want to delete this post?")) return;
 
     try {
-      const { error } = await supabase.from("posts").delete().eq("id", postId);
+      const { error } = await supabase
+        .from("posts")
+        .delete()
+        .eq("id", parseInt(postId));
 
       if (error) throw error;
+
+      // Revalidate the posts cache to ensure data persists
+      await fetch(`/api/posts/refresh?userId=${userId}`, {
+        method: "POST",
+      });
 
       setData((prevData) => ({
         ...prevData,
@@ -561,11 +584,92 @@ export function PostsContent({
         },
       }));
 
-      toast.success("Post deleted successfully");
+      toast.success("Post deleted successfully!");
     } catch (error) {
       console.error("Error deleting post:", error);
       toast.error("Failed to delete post");
-      handleAuthError(error);
+    }
+  };
+
+  const handleArchive = async (postId: string) => {
+    try {
+      const { error } = await supabase
+        .from("posts")
+        .update({ status: "archived" })
+        .eq("id", parseInt(postId));
+
+      if (error) throw error;
+
+      // Revalidate the posts cache to ensure data persists
+      await fetch(`/api/posts/refresh?userId=${userId}`, {
+        method: "POST",
+      });
+
+      setData((prevData) => {
+        const currentPost = prevData.posts.find((p) => p.id === postId);
+        const currentStatus = currentPost?.status;
+
+        return {
+          ...prevData,
+          posts: prevData.posts.map((post) =>
+            post.id === postId ? { ...post, status: "archived" as const } : post
+          ),
+          stats: {
+            ...prevData.stats,
+            archivedPosts: prevData.stats.archivedPosts + 1,
+            draftPosts:
+              currentStatus === "draft"
+                ? prevData.stats.draftPosts - 1
+                : prevData.stats.draftPosts,
+            publishedPosts:
+              currentStatus === "used"
+                ? prevData.stats.publishedPosts - 1
+                : prevData.stats.publishedPosts,
+          },
+        };
+      });
+
+      // Close the modal
+      setArchiveDialogOpen(false);
+      setPostToArchive(null);
+
+      toast.success("Post archived successfully!");
+    } catch (error) {
+      console.error("Error archiving post:", error);
+      toast.error("Failed to archive post");
+    }
+  };
+
+  const handleUnarchive = async (postId: string) => {
+    try {
+      const { error } = await supabase
+        .from("posts")
+        .update({ status: "draft" })
+        .eq("id", parseInt(postId)); // Convert string ID to integer
+
+      if (error) throw error;
+
+      // Revalidate the posts cache to ensure data persists
+      await fetch(`/api/posts/refresh?userId=${userId}`, {
+        method: "POST",
+      });
+
+      setData((prevData) => ({
+        ...prevData,
+        posts: prevData.posts.map((post) =>
+          post.id === postId ? { ...post, status: "draft" as const } : post
+        ),
+        stats: {
+          ...prevData.stats,
+          archivedPosts: prevData.stats.archivedPosts - 1,
+          draftPosts: prevData.stats.draftPosts + 1,
+        },
+      }));
+
+      toast.success("Post unarchived and moved to drafts!");
+    } catch (error) {
+      console.error("Error unarchiving post:", error);
+      toast.error("Failed to unarchive post");
     }
   };
 
@@ -737,9 +841,41 @@ export function PostsContent({
 
   const handlePostClick = (post: Post) => {
     if (post.status === "used") {
+      // For used posts, open analytics dialog if they don't have analytics
+      if (!post.hasAnalytics) {
+        openAnalyticsDialog(post);
+      } else {
+        // Show a toast indicating the post is published and has analytics
+        toast.success("This post has been published and has analytics data!");
+      }
       return;
     }
     handleEdit(post);
+  };
+
+  const handleStatsCardClick = (filterType: string) => {
+    // Reset special filters when clicking regular status filters
+    setNeedsAnalyticsFilter(false);
+
+    // Toggle filter - if clicking the same filter, reset to "all"
+    if (statusFilter === filterType) {
+      setStatusFilter("all");
+    } else {
+      setStatusFilter(filterType);
+    }
+  };
+
+  const handleSpecialFilterClick = (filterType: "needsAnalytics") => {
+    if (filterType === "needsAnalytics") {
+      // Toggle the needs analytics filter
+      const newNeedsAnalyticsFilter = !needsAnalyticsFilter;
+      setNeedsAnalyticsFilter(newNeedsAnalyticsFilter);
+
+      // Reset status filter when enabling needs analytics filter
+      if (newNeedsAnalyticsFilter) {
+        setStatusFilter("all");
+      }
+    }
   };
 
   const renderPostCard = (post: Post) => {
@@ -760,9 +896,7 @@ export function PostsContent({
       <Card
         key={post.id}
         data-post-id={post.id}
-        className={`hover:shadow-lg transition-all duration-500 ${
-          post.status === "used" ? "cursor-default" : "cursor-pointer"
-        } group h-full p-6 ${
+        className={`hover:shadow-lg transition-all duration-500 cursor-pointer group h-full p-6 ${
           post.needsAnalytics ? "ring-2 ring-red-200 border-red-200" : ""
         } ${
           post.hasAnalytics ? "ring-1 ring-green-200 border-green-200" : ""
@@ -1079,6 +1213,33 @@ export function PostsContent({
 
                 <DropdownMenuSeparator />
 
+                {post.status !== "archived" && (
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setPostToArchive(post);
+                      setArchiveDialogOpen(true);
+                    }}
+                    className="text-orange-600 focus:text-orange-600"
+                  >
+                    <Archive className="h-4 w-4 mr-2" />
+                    Archive Post
+                  </DropdownMenuItem>
+                )}
+
+                {post.status === "archived" && (
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleUnarchive(post.id);
+                    }}
+                    className="text-green-600 focus:text-green-600"
+                  >
+                    <ArchiveRestore className="h-4 w-4 mr-2" />
+                    Unarchive Post
+                  </DropdownMenuItem>
+                )}
+
                 <DropdownMenuItem
                   onClick={(e) => {
                     e.stopPropagation();
@@ -1107,7 +1268,7 @@ export function PostsContent({
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <Button
+          {/* <Button
             onClick={() => {
               console.log("🧪 MANUAL TEST: Setting highlight to first post");
               const firstPost = data.posts[0];
@@ -1125,7 +1286,7 @@ export function PostsContent({
             className="bg-yellow-50 border-yellow-200 text-yellow-700 hover:bg-yellow-100"
           >
             🧪 Test Highlight
-          </Button>
+          </Button> */}
 
           <Button
             onClick={refetch}
@@ -1154,46 +1315,130 @@ export function PostsContent({
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
-        <Card>
-          <CardContent className="p-4 text-center">
-            <div className="text-2xl font-bold text-gray-900">
-              {data.stats.totalPosts}
-            </div>
-            <div className="text-sm text-gray-600">Total Posts</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 text-center">
-            <div className="text-2xl font-bold text-blue-600">
-              {data.stats.draftPosts}
-            </div>
-            <div className="text-sm text-gray-600">Drafts</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 text-center">
-            <div className="text-2xl font-bold text-green-600">
-              {data.stats.publishedPosts}
-            </div>
-            <div className="text-sm text-gray-600">Published</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 text-center">
-            <div className="text-2xl font-bold text-orange-600">
-              {data.stats.archivedPosts}
-            </div>
-            <div className="text-sm text-gray-600">Archived</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 text-center">
-            <div className="text-2xl font-bold text-yellow-600">
-              {data.stats.postsNeedingAnalytics}
-            </div>
-            <div className="text-sm text-gray-600">Need Analytics</div>
-          </CardContent>
-        </Card>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Card
+                className={`cursor-pointer transition-all duration-200 hover:shadow-md hover:scale-105 ${
+                  statusFilter === "all"
+                    ? "ring-2 ring-blue-500 bg-blue-50"
+                    : "hover:bg-gray-50"
+                }`}
+                onClick={() => handleStatsCardClick("all")}
+              >
+                <CardContent className="p-4 text-center">
+                  <div className="text-2xl font-bold text-gray-900">
+                    {data.stats.totalPosts}
+                  </div>
+                  <div className="text-sm text-gray-600">Total Posts</div>
+                </CardContent>
+              </Card>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Click to show all posts</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Card
+                className={`cursor-pointer transition-all duration-200 hover:shadow-md hover:scale-105 ${
+                  statusFilter === "draft"
+                    ? "ring-2 ring-blue-500 bg-blue-50"
+                    : "hover:bg-gray-50"
+                }`}
+                onClick={() => handleStatsCardClick("draft")}
+              >
+                <CardContent className="p-4 text-center">
+                  <div className="text-2xl font-bold text-blue-600">
+                    {data.stats.draftPosts}
+                  </div>
+                  <div className="text-sm text-gray-600">Drafts</div>
+                </CardContent>
+              </Card>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Click to filter draft posts</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Card
+                className={`cursor-pointer transition-all duration-200 hover:shadow-md hover:scale-105 ${
+                  statusFilter === "used"
+                    ? "ring-2 ring-blue-500 bg-blue-50"
+                    : "hover:bg-gray-50"
+                }`}
+                onClick={() => handleStatsCardClick("used")}
+              >
+                <CardContent className="p-4 text-center">
+                  <div className="text-2xl font-bold text-green-600">
+                    {data.stats.publishedPosts}
+                  </div>
+                  <div className="text-sm text-gray-600">Published</div>
+                </CardContent>
+              </Card>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Click to filter published posts</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Card
+                className={`cursor-pointer transition-all duration-200 hover:shadow-md hover:scale-105 ${
+                  statusFilter === "archived"
+                    ? "ring-2 ring-blue-500 bg-blue-50"
+                    : "hover:bg-gray-50"
+                }`}
+                onClick={() => handleStatsCardClick("archived")}
+              >
+                <CardContent className="p-4 text-center">
+                  <div className="text-2xl font-bold text-orange-600">
+                    {data.stats.archivedPosts}
+                  </div>
+                  <div className="text-sm text-gray-600">Archived</div>
+                </CardContent>
+              </Card>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Click to filter archived posts</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Card
+                className={`cursor-pointer transition-all duration-200 hover:shadow-md hover:scale-105 ${
+                  needsAnalyticsFilter
+                    ? "ring-2 ring-blue-500 bg-blue-50"
+                    : "hover:bg-gray-50"
+                }`}
+                onClick={() => handleSpecialFilterClick("needsAnalytics")}
+              >
+                <CardContent className="p-4 text-center">
+                  <div className="text-2xl font-bold text-yellow-600">
+                    {data.stats.postsNeedingAnalytics}
+                  </div>
+                  <div className="text-sm text-gray-600">Need Analytics</div>
+                </CardContent>
+              </Card>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Click to filter posts needing analytics</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       </div>
 
       <div className="flex flex-col sm:flex-row gap-4 mb-6">
@@ -1207,7 +1452,13 @@ export function PostsContent({
           />
         </div>
         <div className="flex gap-2">
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <Select
+            value={statusFilter}
+            onValueChange={(value) => {
+              setStatusFilter(value);
+              setNeedsAnalyticsFilter(false); // Reset special filter when using dropdown
+            }}
+          >
             <SelectTrigger className="w-[140px]">
               <SelectValue placeholder="Status" />
             </SelectTrigger>
@@ -1436,6 +1687,69 @@ export function PostsContent({
               </div>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={archiveDialogOpen}
+        onOpenChange={(open) => {
+          setArchiveDialogOpen(open);
+          if (!open) {
+            setPostToArchive(null);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Archive className="h-5 w-5 text-orange-600" />
+              Archive Post
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-gray-700">
+              Are you sure you want to archive this post? It will be moved to
+              your archived posts and hidden from the main view.
+            </p>
+
+            {postToArchive && (
+              <div className="bg-gray-50 p-3 rounded-lg border">
+                <div className="text-sm font-medium text-gray-900 mb-1">
+                  Post Content Preview:
+                </div>
+                <div className="text-sm text-gray-600 line-clamp-3">
+                  {postToArchive.content.substring(0, 150)}
+                  {postToArchive.content.length > 150 ? "..." : ""}
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-end space-x-2">
+              <Button
+                variant="outline"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setArchiveDialogOpen(false);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="bg-orange-600 hover:bg-orange-700 text-white"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (postToArchive) {
+                    handleArchive(postToArchive.id);
+                  }
+                }}
+              >
+                <Archive className="h-4 w-4 mr-2" />
+                Archive Post
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

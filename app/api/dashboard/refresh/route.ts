@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import {
   getDashboardData,
   revalidateDashboard,
+  revalidateCalendar,
+  revalidatePrompts,
 } from "@/lib/supabase/server-queries";
 
 export async function POST(request: NextRequest) {
@@ -28,8 +30,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Revalidate the cache
-    await revalidateDashboard();
+    // Revalidate all related caches
+    await Promise.all([
+      revalidateDashboard(),
+      revalidateCalendar(),
+      revalidatePrompts(),
+    ]);
 
     // Fetch fresh data
     const dashboardData = await getDashboardData(userId);
@@ -43,4 +49,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
- 

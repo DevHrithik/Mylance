@@ -59,7 +59,7 @@ interface ContentPrompt {
   prompt_text: string;
   hook: string;
   is_used: boolean;
-  scheduled_date: string;
+  scheduled_date: string | null;
   pushed_to_calendar: boolean;
   created_at: string;
   feedback_rating?: number;
@@ -293,7 +293,7 @@ export default function UserPromptsPage({ params }: PageProps) {
       `Pillar ${prompt.pillar_number}`;
 
     // Ensure the date is in YYYY-MM-DD format for the date input
-    const formatDateForInput = (dateString: string) => {
+    const formatDateForInput = (dateString: string | null) => {
       if (!dateString) return "";
       // If it's already in YYYY-MM-DD format, return as is
       if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
@@ -308,7 +308,7 @@ export default function UserPromptsPage({ params }: PageProps) {
       pillar_description: actualPillarDescription,
       prompt_text: prompt.prompt_text,
       hook: prompt.hook,
-      scheduled_date: formatDateForInput(prompt.scheduled_date),
+      scheduled_date: formatDateForInput(prompt.scheduled_date) || "",
     });
   };
 
@@ -775,7 +775,7 @@ export default function UserPromptsPage({ params }: PageProps) {
                 <div className="flex items-center justify-between pt-4 border-t border-gray-200">
                   <div className="text-sm text-gray-500">
                     Scheduled for:{" "}
-                    {new Date(prompt.scheduled_date).toLocaleDateString()}
+                    {new Date(prompt.scheduled_date ?? "").toLocaleDateString()}
                   </div>
                   <div className="text-xs text-gray-400">
                     Created {new Date(prompt.created_at).toLocaleDateString()}

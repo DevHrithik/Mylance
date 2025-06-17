@@ -140,6 +140,7 @@ async function getFallbackDashboardData(
         )
         .eq("user_id", userId)
         .eq("is_used", false)
+        .eq("pushed_to_calendar", true)
         .order("scheduled_date", { ascending: true })
         .limit(5),
 
@@ -699,6 +700,7 @@ export const getPromptLibraryData = unstable_cache(
       .from("content_prompts")
       .select("*")
       .eq("user_id", userId)
+      .eq("pushed_to_calendar", true)
       .order("scheduled_date", { ascending: true, nullsFirst: false })
       .order("created_at", { ascending: false });
 
