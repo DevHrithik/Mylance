@@ -255,7 +255,8 @@ export async function middleware(request: NextRequest) {
         hasActiveSubscription = !!(
           subscription &&
           subscription.status === "active" &&
-          subscription.plan_type === "monthly"
+          (subscription.plan_type === "monthly" ||
+            subscription.plan_type === "free")
         );
       } catch (error) {
         console.error("Middleware: Subscription fetch failed:", error);

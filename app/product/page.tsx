@@ -90,16 +90,16 @@ export default function ProductPage() {
     );
   }
 
-  // Show go to dashboard button instead of auto-redirect
+  // Show go to dashboard button for users with access (including free plans)
   if (hasAccess || isAdmin) {
     return (
       <div className="min-h-screen flex items-center justify-center p-6">
         <div className="text-center max-w-md">
-          <h2 className="text-2xl font-bold mb-4">You are All Set!</h2>
+          <h2 className="text-2xl font-bold mb-4">Welcome to Mylance!</h2>
           <p className="text-gray-600 mb-6">
             {isAdmin
               ? "You have admin access to Mylance."
-              : "You already have an active subscription."}
+              : "Your account is ready! Start creating content on your dashboard."}
           </p>
           <Button
             onClick={() => router.push(isAdmin ? "/admin" : "/dashboard")}

@@ -187,19 +187,21 @@ export function OnboardingWizard() {
         } = await supabase.auth.getUser();
 
         if (user) {
+          console.log("Step 16: Clearing onboarding progress...");
           await supabase
             .from("onboarding_progress")
             .delete()
             .eq("user_id", user.id);
         }
 
-        // Redirect to product page for payment
-        console.log(
-          "Onboarding completed! Redirecting to product page for plan selection..."
-        );
+        // Small delay to ensure database updates are processed
+        await new Promise((resolve) => setTimeout(resolve, 500));
 
-        // Use replace instead of push to prevent back navigation issues
-        router.replace("/product");
+        // Redirect to product page
+        console.log("Onboarding completed! Redirecting to product page...");
+
+        // Force a hard redirect to prevent middleware conflicts
+        window.location.href = "/product";
         return;
       } catch (err: any) {
         console.error("Failed to complete onboarding:", err);
@@ -263,6 +265,27 @@ export function OnboardingWizard() {
     }
 
     console.log("Profile updated successfully with onboarding data");
+
+    // Create a default subscription record to prevent redirect loops
+    // This will be a "free" plan that gets upgraded when payment is complete
+    const { error: subscriptionError } = await supabase
+      .from("subscriptions")
+      .upsert({
+        user_id: user.id,
+        plan_type: "free",
+        status: "active",
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+
+    if (subscriptionError) {
+      console.error("Subscription creation error:", subscriptionError);
+      // Don't throw error here as profile update succeeded
+      // User can still proceed to product page
+      console.log("Continuing without subscription record...");
+    } else {
+      console.log("Default subscription record created successfully");
+    }
   };
 
   const updateData = (field: keyof OnboardingData, value: any) => {

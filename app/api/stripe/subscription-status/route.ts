@@ -46,7 +46,8 @@ export async function GET() {
     const hasActiveSubscription =
       subscription &&
       subscription.status === "active" &&
-      subscription.plan_type === "monthly";
+      (subscription.plan_type === "monthly" ||
+        subscription.plan_type === "free");
 
     return NextResponse.json({
       hasAccess: hasActiveSubscription,
