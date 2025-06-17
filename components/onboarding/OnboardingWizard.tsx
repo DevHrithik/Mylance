@@ -65,16 +65,37 @@ export function OnboardingWizard() {
         } = await supabase.auth.getUser();
 
         if (user && user.email && !userError) {
+          // First check if user has already completed onboarding
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("onboarding_completed, is_admin")
+            .eq("id", user.id)
+            .single();
+
+          if (profile?.onboarding_completed) {
+            console.log(
+              "User has already completed onboarding, redirecting..."
+            );
+            if (profile.is_admin) {
+              window.location.href = "/admin";
+            } else {
+              window.location.href = "/product";
+            }
+            return;
+          }
+
           setData((prev) => ({ ...prev, email: user.email! }));
 
           // Try to load existing onboarding data
-          const { data: existingData } = await supabase
+          const { data: existingData, error: progressError } = await supabase
             .from("onboarding_progress")
             .select("*")
             .eq("user_id", user.id)
-            .single();
+            .maybeSingle();
 
-          if (existingData && existingData.data) {
+          if (progressError) {
+            console.error("Error loading onboarding progress:", progressError);
+          } else if (existingData && existingData.data) {
             setData({ ...existingData.data });
             // Resume from the last step they were on
             if (existingData.current_step) {
@@ -105,12 +126,23 @@ export function OnboardingWizard() {
 
       const updatedData = { ...data, ...stepData };
 
-      await supabase.from("onboarding_progress").upsert({
-        user_id: user.id,
-        current_step: step,
-        data: updatedData,
-        updated_at: new Date().toISOString(),
-      });
+      const { error: upsertError } = await supabase
+        .from("onboarding_progress")
+        .upsert(
+          {
+            user_id: user.id,
+            current_step: step,
+            data: updatedData,
+            updated_at: new Date().toISOString(),
+          },
+          {
+            onConflict: "user_id",
+          }
+        );
+
+      if (upsertError) {
+        console.error("Error saving progress:", upsertError);
+      }
     } catch (error) {
       console.error("Error saving progress:", error);
       // Don't block the user flow if saving fails
@@ -218,6 +250,14 @@ export function OnboardingWizard() {
 
         console.log("✅ Profile updated with onboarding_completed = true");
 
+        // Clear middleware cache to prevent stale data
+        try {
+          await fetch("/api/clear-cache", { method: "POST" });
+          console.log("✅ Middleware cache cleared");
+        } catch (e) {
+          console.log("Cache clear failed, continuing...");
+        }
+
         // Clear the onboarding progress since it's complete
         console.log("Step 16: Clearing onboarding progress...");
         await supabase
@@ -225,10 +265,12 @@ export function OnboardingWizard() {
           .delete()
           .eq("user_id", user.id);
 
-        console.log("✅ Onboarding completed! Redirecting to product page...");
+        console.log(
+          "✅ Onboarding completed! Force redirecting to product page..."
+        );
 
-        // Simple redirect to product page
-        router.push("/product");
+        // Force hard redirect to bypass middleware cache
+        window.location.href = "/product";
         return;
       } catch (err: any) {
         console.error("Failed to complete onboarding:", err);

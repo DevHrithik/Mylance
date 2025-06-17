@@ -5,6 +5,11 @@ import { NextResponse, type NextRequest } from "next/server";
 const profileCache = new Map<string, { data: any; timestamp: number }>();
 const CACHE_DURATION = 2 * 60 * 1000; // 2 minutes - optimized for better performance
 
+// Make cache globally accessible for clearing
+if (typeof global !== "undefined") {
+  global.middlewareProfileCache = profileCache;
+}
+
 // Helper function to create response with Netlify-specific cache headers
 function createNetlifyResponse(
   request: NextRequest,
@@ -85,6 +90,11 @@ async function getCachedProfile(userId: string, supabase: any) {
 
     // Cache the result
     profileCache.set(userId, { data, timestamp: now });
+
+    // Log cache update for debugging
+    console.log(
+      `Middleware: Cached profile for user ${userId} - onboarding_completed: ${data?.onboarding_completed}`
+    );
 
     // Clean up old cache entries (keep cache size manageable)
     if (profileCache.size > 100) {

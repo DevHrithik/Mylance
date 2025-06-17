@@ -333,8 +333,7 @@ export class NetlifyAutoAuth {
       currentPath === "/" ||
       currentPath.startsWith("/login") ||
       currentPath.startsWith("/signup") ||
-      currentPath.startsWith("/help") ||
-      currentPath.startsWith("/product")
+      currentPath.startsWith("/help")
     ) {
       if (state.isAuthenticated) {
         // Auto-redirect authenticated users to appropriate dashboard
@@ -347,6 +346,23 @@ export class NetlifyAutoAuth {
         }
       }
       return null; // Stay on public page if not authenticated
+    }
+
+    // Product page - ALLOW authenticated users to stay here (don't auto-redirect)
+    if (currentPath.startsWith("/product")) {
+      if (!state.isAuthenticated) {
+        return "/login";
+      }
+      // Admins should go to admin panel
+      if (state.user?.is_admin) {
+        return "/admin";
+      }
+      // Users without completed onboarding should go to onboarding
+      if (!state.user?.onboarding_completed) {
+        return "/onboarding";
+      }
+      // Users with completed onboarding can stay on product page
+      return null;
     }
 
     // Auth routes
@@ -382,7 +398,7 @@ export class NetlifyAutoAuth {
         if (state.user?.is_admin) {
           return "/admin";
         } else {
-          return "/dashboard";
+          return "/product"; // Send completed users to product page instead of dashboard
         }
       }
       return null; // Stay on onboarding if not completed
