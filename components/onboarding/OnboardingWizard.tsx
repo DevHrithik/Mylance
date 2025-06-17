@@ -6,8 +6,9 @@ import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2 } from "lucide-react";
+import { Loader2, ArrowLeft } from "lucide-react";
 import { ProgressIndicator } from "./ProgressIndicator";
+import { CalendlyStep } from "./steps/CalendlyStep";
 
 interface OnboardingData {
   email: string;
@@ -54,11 +55,12 @@ export function OnboardingWizard() {
   const [data, setData] = useState<OnboardingData>(initialData);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hasBookedCall, setHasBookedCall] = useState(false);
 
   const router = useRouter();
   const supabase = createClient();
 
-  // Initialize user email from auth
+  // Initialize user email from auth and load existing onboarding data
   useEffect(() => {
     const initializeUserData = async () => {
       try {
@@ -69,6 +71,21 @@ export function OnboardingWizard() {
 
         if (user && user.email && !userError) {
           setData((prev) => ({ ...prev, email: user.email! }));
+
+          // Try to load existing onboarding data
+          const { data: existingData } = await supabase
+            .from("onboarding_progress")
+            .select("*")
+            .eq("user_id", user.id)
+            .single();
+
+          if (existingData && existingData.data) {
+            setData({ ...initialData, ...existingData.data });
+            // Resume from the last step they were on
+            if (existingData.current_step) {
+              setCurrentStep(existingData.current_step);
+            }
+          }
         }
       } catch (error) {
         console.error("Error fetching user data:", error);
@@ -77,6 +94,33 @@ export function OnboardingWizard() {
 
     initializeUserData();
   }, [supabase]);
+
+  // Save progress to database after each step
+  const saveProgress = async (
+    stepData: Partial<OnboardingData>,
+    step: number
+  ) => {
+    try {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError || !user) return;
+
+      const updatedData = { ...data, ...stepData };
+
+      await supabase.from("onboarding_progress").upsert({
+        user_id: user.id,
+        current_step: step,
+        data: updatedData,
+        updated_at: new Date().toISOString(),
+      });
+    } catch (error) {
+      console.error("Error saving progress:", error);
+      // Don't block the user flow if saving fails
+    }
+  };
 
   const handleNext = async () => {
     setError(null);
@@ -159,37 +203,45 @@ export function OnboardingWizard() {
       }
     }
 
-    // After step 16, save onboarding data and redirect to product page
+    // After step 16, move to Calendly step (step 17)
     if (currentStep === 16) {
+      // Save progress before moving to Calendly step
+      await saveProgress({}, currentStep + 1);
+      setCurrentStep(currentStep + 1);
+      return;
+    }
+
+    // After step 17 (Calendly), save onboarding data and redirect to product page
+    if (currentStep === 17) {
       setIsLoading(true);
-      console.log("Step 16: Starting onboarding completion process...");
+      console.log("Step 17: Starting onboarding completion process...");
 
       try {
-        console.log("Step 16: Saving onboarding data...");
+        console.log("Step 17: Saving onboarding data...");
         await handleOnboardingDataSubmit();
         console.log(
           "Step 16: Data saved successfully, redirecting to product page..."
         );
+
+        // Clear the onboarding progress since it's complete
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+
+        if (user) {
+          await supabase
+            .from("onboarding_progress")
+            .delete()
+            .eq("user_id", user.id);
+        }
 
         // Redirect to product page for payment
         console.log(
           "Onboarding completed! Redirecting to product page for plan selection..."
         );
 
-        // Method 1: Immediate router push to product
-        router.push("/product");
-
-        // Method 2: Delayed router push
-        setTimeout(() => {
-          console.log("Executing delayed redirect to /product");
-          router.push("/product");
-        }, 100);
-
-        // Method 3: Browser location as final fallback
-        setTimeout(() => {
-          console.log("Executing browser redirect to /product as fallback");
-          window.location.href = "/product";
-        }, 500);
+        // Use replace instead of push to prevent back navigation issues
+        router.replace("/product");
         return;
       } catch (err: any) {
         console.error("Failed to complete onboarding:", err);
@@ -197,99 +249,92 @@ export function OnboardingWizard() {
           err.message || "Failed to save your information. Please try again."
         );
         setIsLoading(false);
+        return;
       }
-      return;
     }
 
-    // Normal flow for steps 1-15
-    if (currentStep < 16) {
-      setCurrentStep((prev) => prev + 1);
+    // Save progress before moving to next step
+    await saveProgress({}, currentStep + 1);
+
+    setCurrentStep(currentStep + 1);
+  };
+
+  const handleBack = () => {
+    if (currentStep > 1) {
+      setCurrentStep(currentStep - 1);
+    }
+  };
+
+  // Handle "I already booked my call" functionality
+  const handleAlreadyBookedCall = async () => {
+    setHasBookedCall(true);
+    setIsLoading(true);
+
+    try {
+      await handleOnboardingDataSubmit();
+
+      // Clear the onboarding progress since it's complete
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (user) {
+        await supabase
+          .from("onboarding_progress")
+          .delete()
+          .eq("user_id", user.id);
+      }
+
+      router.replace("/product");
+    } catch (err: any) {
+      console.error("Failed to complete onboarding:", err);
+      setError(
+        err.message || "Failed to save your information. Please try again."
+      );
+      setIsLoading(false);
     }
   };
 
   const handleOnboardingDataSubmit = async () => {
-    setError(null);
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
 
-    try {
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
-
-      if (userError || !user) {
-        throw new Error("User not authenticated");
-      }
-
-      console.log("Saving onboarding data for user:", user.id);
-
-      // Use the authenticated user's email instead of form email to avoid unique constraint issues
-      const profileData = {
-        id: user.id,
-        email: user.email || data.email,
-        first_name: data.firstName,
-        linkedin_url: data.linkedinUrl,
-        business_type: data.businessType,
-        business_size: data.businessSize,
-        business_stage: data.businessStage,
-        linkedin_importance: data.linkedinImportance,
-        investment_willingness: data.investmentWillingness,
-        posting_mindset: data.postingMindset,
-        current_posting_frequency: data.currentPostingFrequency,
-        client_attraction_methods: data.clientAttractionMethods,
-        ideal_target_client: data.idealTargetClient,
-        client_pain_points: data.clientPainPoints,
-        unique_value_proposition: data.uniqueValueProposition,
-        proof_points: data.proofPoints,
-        heard_about_mylance:
-          data.heardAboutMylance === "Other (please specify)"
-            ? data.heardAboutMylanceOther || data.heardAboutMylance
-            : data.heardAboutMylance,
-        profile_locked: true, // Lock profile until payment/completion
-        onboarding_completed: true, // Mark onboarding as completed
-        updated_at: new Date().toISOString(),
-      };
-
-      // Update profiles table with all onboarding data
-      const { error: profileError } = await supabase
-        .from("profiles")
-        .upsert(profileData);
-
-      if (profileError) {
-        console.error("Profile update error:", profileError);
-        throw new Error(
-          `Profile update failed: ${
-            profileError.message || JSON.stringify(profileError)
-          }`
-        );
-      }
-
-      // Create default user preferences
-      const { error: preferencesError } = await supabase
-        .from("user_preferences")
-        .upsert({
-          user_id: user.id,
-          onboarding_data: data,
-          email_notifications: true,
-          content_reminders: true,
-          weekly_insights: true,
-          marketing_emails: false,
-          updated_at: new Date().toISOString(),
-        });
-
-      if (preferencesError) {
-        console.error("Preferences update error:", preferencesError);
-        // Don't throw error for preferences - not critical for flow
-        console.warn(
-          "User preferences could not be saved, but onboarding will continue"
-        );
-      }
-
-      console.log("Onboarding data saved successfully");
-    } catch (err: any) {
-      console.error("Onboarding data save error:", err);
-      setError(err.message || "Something went wrong. Please try again.");
-      throw err;
+    if (userError || !user) {
+      throw new Error("User not authenticated");
     }
+
+    // Update user profile with onboarding data
+    const { error: profileError } = await supabase.from("profiles").upsert({
+      id: user.id,
+      email: data.email,
+      first_name: data.firstName,
+      linkedin_url: data.linkedinUrl,
+      business_type: data.businessType,
+      business_size: data.businessSize,
+      business_stage: data.businessStage,
+      linkedin_importance: data.linkedinImportance,
+      investment_willingness: data.investmentWillingness,
+      posting_mindset: data.postingMindset,
+      current_posting_frequency: data.currentPostingFrequency,
+      client_attraction_methods: data.clientAttractionMethods,
+      ideal_target_client: data.idealTargetClient,
+      client_pain_points: data.clientPainPoints,
+      unique_value_proposition: data.uniqueValueProposition,
+      proof_points: data.proofPoints,
+      heard_about_mylance: data.heardAboutMylance,
+      heard_about_mylance_other: data.heardAboutMylanceOther,
+      onboarding_completed: true,
+      updated_at: new Date().toISOString(),
+    });
+
+    if (profileError) {
+      console.error("Profile update error:", profileError);
+      throw new Error(`Failed to update profile: ${profileError.message}`);
+    }
+
+    console.log("Profile updated successfully with onboarding data");
   };
 
   const updateData = (field: keyof OnboardingData, value: any) => {
@@ -297,99 +342,100 @@ export function OnboardingWizard() {
   };
 
   const toggleMultiSelect = (field: keyof OnboardingData, value: string) => {
-    setData((prev) => {
-      const currentArray = prev[field] as string[];
-      const newArray = currentArray.includes(value)
-        ? currentArray.filter((item) => item !== value)
-        : [...currentArray, value];
-      return { ...prev, [field]: newArray };
-    });
+    const currentValues = data[field] as string[];
+    const newValues = currentValues.includes(value)
+      ? currentValues.filter((v) => v !== value)
+      : [...currentValues, value];
+    updateData(field, newValues);
   };
 
   const getValidationError = () => {
     switch (currentStep) {
       case 1:
-        if (!data.email.trim()) return "Please enter your email address";
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(data.email.trim()))
+        if (!data.email) return "Email is required";
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email))
           return "Please enter a valid email address";
-        return null;
+        break;
       case 2:
-        if (!data.linkedinUrl.trim()) return "Please enter your LinkedIn URL";
-        if (!data.linkedinUrl.includes("linkedin.com"))
-          return "Please enter a valid LinkedIn URL";
-        return null;
+        if (!data.linkedinUrl) return "LinkedIn URL is required";
+        if (!data.linkedinUrl.includes("linkedin.com/in/"))
+          return "Please enter a valid LinkedIn profile URL";
+        break;
       default:
         return null;
     }
+    return null;
   };
 
   const validateStep = () => {
     switch (currentStep) {
       case 1:
-        // Improved email validation
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        return emailRegex.test(data.email.trim());
+        return data.email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email);
       case 2:
-        return data.linkedinUrl.includes("linkedin.com");
+        return (
+          data.linkedinUrl && data.linkedinUrl.includes("linkedin.com/in/")
+        );
       case 3:
         return data.firstName.trim().length > 0;
       case 4:
-        return data.businessType.length > 0;
+        return data.businessType.trim().length > 0;
       case 5:
-        return data.businessSize.length > 0;
+        return data.businessSize.trim().length > 0;
       case 6:
-        return data.businessStage.length > 0;
+        return data.businessStage.trim().length > 0;
       case 7:
-        return data.linkedinImportance.length > 0;
+        return data.linkedinImportance.trim().length > 0;
       case 8:
-        return data.investmentWillingness.length > 0;
+        return data.investmentWillingness.trim().length > 0;
       case 9:
-        return data.postingMindset.length > 0;
+        return data.postingMindset.trim().length > 0;
       case 10:
-        return data.currentPostingFrequency.length > 0;
+        return data.currentPostingFrequency.trim().length > 0;
       case 11:
         return data.clientAttractionMethods.length > 0;
       case 12:
-        return data.idealTargetClient.trim().length > 10;
+        return data.idealTargetClient.trim().length > 0;
       case 13:
-        return data.clientPainPoints.trim().length > 10;
+        return data.clientPainPoints.trim().length > 0;
       case 14:
-        return data.uniqueValueProposition.trim().length > 10;
+        return data.uniqueValueProposition.trim().length > 0;
       case 15:
-        return data.proofPoints.trim().length > 10;
+        return data.proofPoints.trim().length > 0;
       case 16:
+        const isOtherSelected =
+          data.heardAboutMylance === "Other (please specify)";
         return (
           data.heardAboutMylance.trim().length > 0 &&
-          (data.heardAboutMylance !== "Other (please specify)" ||
-            (data.heardAboutMylanceOther &&
-              data.heardAboutMylanceOther.trim().length > 0))
+          (!isOtherSelected ||
+            (data.heardAboutMylanceOther?.trim().length || 0) > 0)
         );
+      case 17:
+        return true; // Calendly step - no validation needed
       default:
         return true;
     }
   };
 
-  // Add keyboard event handler for Enter key
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey && validateStep() && !isLoading) {
-      e.preventDefault();
+    if (e.key === "Enter" && validateStep()) {
       handleNext();
     }
   };
 
-  // Special handler for textareas - allows Shift+Enter for line breaks
   const handleTextareaKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey && validateStep() && !isLoading) {
+    if (e.key === "Enter" && e.shiftKey) {
+      // Allow line breaks with Shift+Enter
+      return;
+    } else if (e.key === "Enter" && validateStep()) {
       e.preventDefault();
       handleNext();
     }
-    // Allow Shift+Enter for line breaks in textareas
   };
 
   const renderStep = () => {
     const commonClasses =
       "min-h-screen flex items-center justify-center p-6 relative overflow-hidden";
+
     const backgroundShapes = (
       <>
         <div className="absolute top-0 left-0 w-80 h-80 bg-yellow-400 rounded-full opacity-80 -translate-x-32 -translate-y-32"></div>
@@ -398,10 +444,23 @@ export function OnboardingWizard() {
       </>
     );
 
+    // Back button component (like the design shown)
+    const BackButton = () =>
+      currentStep > 1 && (
+        <button
+          onClick={handleBack}
+          className="fixed top-6 left-6 z-50 flex items-center space-x-2 px-4 py-2 bg-white/90 backdrop-blur-sm border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-all duration-200 text-gray-600 hover:text-gray-800"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          <span className="text-sm font-medium">Back</span>
+        </button>
+      );
+
     switch (currentStep) {
       case 1:
         return (
           <div className={commonClasses}>
+            <BackButton />
             {backgroundShapes}
             <div className="relative z-10 max-w-2xl w-full text-center">
               <div className="mb-8">
@@ -437,7 +496,7 @@ export function OnboardingWizard() {
                 disabled={!validateStep()}
                 className="bg-teal-500 hover:bg-teal-600 text-white px-10 py-3 rounded font-medium text-lg"
               >
-                OK
+                Continue
               </Button>
 
               <div className="mt-16">
@@ -450,6 +509,7 @@ export function OnboardingWizard() {
       case 2:
         return (
           <div className={commonClasses}>
+            <BackButton />
             {backgroundShapes}
             <div className="relative z-10 max-w-2xl w-full text-center">
               <div className="mb-8">
@@ -485,7 +545,7 @@ export function OnboardingWizard() {
                 disabled={!validateStep()}
                 className="bg-teal-500 hover:bg-teal-600 text-white px-10 py-3 rounded font-medium text-lg"
               >
-                OK
+                Continue
               </Button>
 
               <div className="mt-16">
@@ -498,6 +558,7 @@ export function OnboardingWizard() {
       case 3:
         return (
           <div className={commonClasses}>
+            <BackButton />
             {backgroundShapes}
             <div className="relative z-10 max-w-2xl w-full text-center">
               <div className="mb-8">
@@ -537,7 +598,7 @@ export function OnboardingWizard() {
                       : "Loading..."}
                   </>
                 ) : (
-                  "OK"
+                  "Continue"
                 )}
               </Button>
 
@@ -572,6 +633,7 @@ export function OnboardingWizard() {
 
         return (
           <div className={commonClasses}>
+            <BackButton />
             {backgroundShapes}
             <div className="relative z-10 max-w-3xl w-full text-center">
               <div className="mb-8">
@@ -606,7 +668,7 @@ export function OnboardingWizard() {
                 disabled={!validateStep()}
                 className="bg-teal-500 hover:bg-teal-600 text-white px-10 py-3 rounded font-medium text-lg"
               >
-                OK
+                Continue
               </Button>
 
               <div className="mt-16">
@@ -627,6 +689,7 @@ export function OnboardingWizard() {
 
         return (
           <div className={commonClasses}>
+            <BackButton />
             {backgroundShapes}
             <div className="relative z-10 max-w-2xl w-full text-center">
               <div className="mb-8">
@@ -660,7 +723,7 @@ export function OnboardingWizard() {
                 disabled={!validateStep()}
                 className="bg-teal-500 hover:bg-teal-600 text-white px-10 py-3 rounded font-medium text-lg"
               >
-                OK
+                Continue
               </Button>
 
               <div className="mt-16">
@@ -687,6 +750,7 @@ export function OnboardingWizard() {
 
         return (
           <div className={commonClasses}>
+            <BackButton />
             {backgroundShapes}
             <div className="relative z-10 max-w-3xl w-full text-center">
               <div className="mb-8">
@@ -723,7 +787,7 @@ export function OnboardingWizard() {
                 disabled={!validateStep()}
                 className="bg-teal-500 hover:bg-teal-600 text-white px-10 py-3 rounded font-medium text-lg"
               >
-                OK
+                Continue
               </Button>
 
               <div className="mt-16">
@@ -742,6 +806,7 @@ export function OnboardingWizard() {
 
         return (
           <div className={commonClasses}>
+            <BackButton />
             {backgroundShapes}
             <div className="relative z-10 max-w-3xl w-full text-center">
               <div className="mb-8">
@@ -778,7 +843,7 @@ export function OnboardingWizard() {
                 disabled={!validateStep()}
                 className="bg-teal-500 hover:bg-teal-600 text-white px-10 py-3 rounded font-medium text-lg"
               >
-                OK
+                Continue
               </Button>
 
               <div className="mt-16">
@@ -810,6 +875,7 @@ export function OnboardingWizard() {
 
         return (
           <div className={commonClasses}>
+            <BackButton />
             {backgroundShapes}
             <div className="relative z-10 max-w-4xl w-full text-center">
               <div className="mb-8">
@@ -845,7 +911,7 @@ export function OnboardingWizard() {
                 disabled={!validateStep()}
                 className="bg-teal-500 hover:bg-teal-600 text-white px-10 py-3 rounded font-medium text-lg"
               >
-                OK
+                Continue
               </Button>
 
               <div className="mt-16">
@@ -875,6 +941,7 @@ export function OnboardingWizard() {
 
         return (
           <div className={commonClasses}>
+            <BackButton />
             {backgroundShapes}
             <div className="relative z-10 max-w-4xl w-full text-center">
               <div className="mb-8">
@@ -909,7 +976,7 @@ export function OnboardingWizard() {
                 disabled={!validateStep()}
                 className="bg-teal-500 hover:bg-teal-600 text-white px-10 py-3 rounded font-medium text-lg"
               >
-                OK
+                Continue
               </Button>
 
               <div className="mt-16">
@@ -929,6 +996,7 @@ export function OnboardingWizard() {
 
         return (
           <div className={commonClasses}>
+            <BackButton />
             {backgroundShapes}
             <div className="relative z-10 max-w-2xl w-full text-center">
               <div className="mb-8">
@@ -964,7 +1032,7 @@ export function OnboardingWizard() {
                 disabled={!validateStep()}
                 className="bg-teal-500 hover:bg-teal-600 text-white px-10 py-3 rounded font-medium text-lg"
               >
-                OK
+                Continue
               </Button>
 
               <div className="mt-16">
@@ -989,6 +1057,7 @@ export function OnboardingWizard() {
 
         return (
           <div className={commonClasses}>
+            <BackButton />
             {backgroundShapes}
             <div className="relative z-10 max-w-3xl w-full text-center">
               <div className="mb-8">
@@ -1030,7 +1099,7 @@ export function OnboardingWizard() {
                 disabled={!validateStep()}
                 className="bg-teal-500 hover:bg-teal-600 text-white px-10 py-3 rounded font-medium text-lg"
               >
-                OK
+                Continue
               </Button>
 
               <div className="mt-16">
@@ -1043,6 +1112,7 @@ export function OnboardingWizard() {
       case 12:
         return (
           <div className={commonClasses}>
+            <BackButton />
             {backgroundShapes}
             <div className="relative z-10 max-w-3xl w-full text-center">
               <div className="mb-8">
@@ -1077,7 +1147,7 @@ export function OnboardingWizard() {
                 disabled={!validateStep()}
                 className="bg-teal-500 hover:bg-teal-600 text-white px-10 py-3 rounded font-medium text-lg"
               >
-                OK
+                Continue
               </Button>
 
               <div className="mt-16">
@@ -1090,6 +1160,7 @@ export function OnboardingWizard() {
       case 13:
         return (
           <div className={commonClasses}>
+            <BackButton />
             {backgroundShapes}
             <div className="relative z-10 max-w-3xl w-full text-center">
               <div className="mb-8">
@@ -1125,7 +1196,7 @@ export function OnboardingWizard() {
                 disabled={!validateStep()}
                 className="bg-teal-500 hover:bg-teal-600 text-white px-10 py-3 rounded font-medium text-lg"
               >
-                OK
+                Continue
               </Button>
 
               <div className="mt-16">
@@ -1138,6 +1209,7 @@ export function OnboardingWizard() {
       case 14:
         return (
           <div className={commonClasses}>
+            <BackButton />
             {backgroundShapes}
             <div className="relative z-10 max-w-3xl w-full text-center">
               <div className="mb-8">
@@ -1175,7 +1247,7 @@ export function OnboardingWizard() {
                 disabled={!validateStep()}
                 className="bg-teal-500 hover:bg-teal-600 text-white px-10 py-3 rounded font-medium text-lg"
               >
-                OK
+                Continue
               </Button>
 
               <div className="mt-16">
@@ -1188,6 +1260,7 @@ export function OnboardingWizard() {
       case 15:
         return (
           <div className={commonClasses}>
+            <BackButton />
             {backgroundShapes}
             <div className="relative z-10 max-w-3xl w-full text-center">
               <div className="mb-8">
@@ -1226,7 +1299,7 @@ export function OnboardingWizard() {
                 disabled={!validateStep() || isLoading}
                 className="bg-teal-500 hover:bg-teal-600 text-white px-10 py-3 rounded font-medium text-lg"
               >
-                OK
+                {isLoading ? "Saving..." : "Continue"}
               </Button>
 
               {error && <p className="text-red-600 mt-4">{error}</p>}
@@ -1253,6 +1326,7 @@ export function OnboardingWizard() {
 
         return (
           <div className={commonClasses}>
+            <BackButton />
             {backgroundShapes}
             <div className="relative z-10 max-w-3xl w-full text-center">
               <div className="mb-8">
@@ -1302,7 +1376,7 @@ export function OnboardingWizard() {
                 disabled={!validateStep() || isLoading}
                 className="bg-teal-500 hover:bg-teal-600 text-white px-10 py-3 rounded font-medium text-lg"
               >
-                {isLoading ? "Saving..." : "Continue to Product"}
+                {isLoading ? "Saving..." : "Continue"}
               </Button>
 
               {error && <p className="text-red-600 mt-4">{error}</p>}
@@ -1314,6 +1388,15 @@ export function OnboardingWizard() {
           </div>
         );
 
+      case 17:
+        return (
+          <CalendlyStep
+            onNext={handleNext}
+            onSkip={handleNext}
+            onAlreadyBooked={handleAlreadyBookedCall}
+          />
+        );
+
       default:
         return null;
     }
@@ -1323,7 +1406,7 @@ export function OnboardingWizard() {
     <>
       {/* Progress Bar at the very top */}
       <div className="w-full shadow-md">
-        <ProgressIndicator currentStep={currentStep} totalSteps={16} />
+        <ProgressIndicator currentStep={currentStep} totalSteps={17} />
       </div>
       {renderStep()}
     </>

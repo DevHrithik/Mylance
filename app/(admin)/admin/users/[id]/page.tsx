@@ -14,6 +14,7 @@ import {
   Zap,
   MessageSquare,
   Sparkles,
+  CreditCard,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -70,6 +71,8 @@ export default function UserDetailPage({ params }: PageProps) {
   const [generatingStrategy, setGeneratingStrategy] = useState(false);
   const [generatingPillars, setGeneratingPillars] = useState(false);
   const [generatingPrompts, setGeneratingPrompts] = useState(false);
+  const [upgradingSubscription, setUpgradingSubscription] = useState(false);
+
   const [formData, setFormData] = useState({
     first_name: "",
     business_type: "",
@@ -87,6 +90,7 @@ export default function UserDetailPage({ params }: PageProps) {
   const getUserData = useCallback(async () => {
     const supabase = createClient();
 
+    // Fetch user profile data
     const { data: userData, error: userError } = await supabase
       .from("profiles")
       .select(
@@ -105,8 +109,7 @@ export default function UserDetailPage({ params }: PageProps) {
         onboarding_completed,
         profile_locked,
         created_at,
-        last_login_at,
-        subscriptions(plan_type, status, current_period_end)
+        last_login_at
       `
       )
       .eq("id", resolvedParams.id)
@@ -115,6 +118,16 @@ export default function UserDetailPage({ params }: PageProps) {
     if (userError) {
       notFound();
       return;
+    }
+
+    // Fetch subscription data separately to ensure it works
+    const { data: subscriptionData, error: subscriptionError } = await supabase
+      .from("subscriptions")
+      .select("plan_type, status, current_period_end")
+      .eq("user_id", resolvedParams.id);
+
+    if (subscriptionError) {
+      console.error("Error fetching subscription:", subscriptionError);
     }
 
     // Get post count
@@ -127,6 +140,7 @@ export default function UserDetailPage({ params }: PageProps) {
       ...userData,
       post_count: postCount || 0,
       content_pillars: userData.content_pillars || [],
+      subscriptions: subscriptionData || [],
     };
 
     setUser(userWithPostCount);
@@ -491,6 +505,97 @@ export default function UserDetailPage({ params }: PageProps) {
     }
   };
 
+  const handleUpgradeToMylancePremium = async () => {
+    setUpgradingSubscription(true);
+    const supabase = createClient();
+
+    try {
+      // Get current admin user for logging
+      const {
+        data: { user: currentUser },
+      } = await supabase.auth.getUser();
+
+      // Check if user already has a subscription
+      const { data: existingSubscription } = await supabase
+        .from("subscriptions")
+        .select("*")
+        .eq("user_id", resolvedParams.id)
+        .single();
+
+      if (existingSubscription) {
+        // Update existing subscription to active
+        const { error } = await supabase
+          .from("subscriptions")
+          .update({
+            plan_type: "monthly",
+            status: "active",
+            current_period_start: new Date().toISOString(),
+            current_period_end: new Date(
+              Date.now() + 30 * 24 * 60 * 60 * 1000
+            ).toISOString(), // 30 days from now
+            canceled_at: null, // Clear any previous cancellation
+            updated_at: new Date().toISOString(),
+          })
+          .eq("user_id", resolvedParams.id);
+
+        if (error) throw error;
+      } else {
+        // Create new subscription
+        const { error } = await supabase.from("subscriptions").insert({
+          user_id: resolvedParams.id,
+          plan_type: "monthly",
+          status: "active",
+          current_period_start: new Date().toISOString(),
+          current_period_end: new Date(
+            Date.now() + 30 * 24 * 60 * 60 * 1000
+          ).toISOString(), // 30 days from now
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        });
+
+        if (error) throw error;
+      }
+
+      // Log admin activity
+      if (currentUser) {
+        // Get admin user record for logging
+        const { data: adminUser } = await supabase
+          .from("admin_users")
+          .select("id")
+          .eq("user_id", currentUser.id)
+          .single();
+
+        if (adminUser) {
+          await supabase.from("admin_activity_log").insert({
+            admin_id: adminUser.id,
+            action: "upgrade_user_subscription",
+            target_user_id: resolvedParams.id,
+            target_type: "subscription",
+            target_id: existingSubscription?.id?.toString(),
+            details: {
+              action: "manual_upgrade",
+              new_plan: "monthly",
+              previous_plan: existingSubscription?.plan_type || "free",
+              admin_action: true,
+            },
+          });
+        }
+      }
+
+      toast.success("User upgraded to Mylance Premium successfully!");
+
+      // Refresh user data with a small delay to ensure database consistency
+      setTimeout(async () => {
+        await getUserData();
+      }, 500);
+    } catch (error) {
+      console.error("Error upgrading subscription:", error);
+      toast.error("Failed to upgrade user subscription");
+    } finally {
+      setUpgradingSubscription(false);
+    }
+  };
+
   // Check for changes in different sections
   const detailsChanged =
     formData.first_name !== originalData.first_name ||
@@ -660,16 +765,26 @@ export default function UserDetailPage({ params }: PageProps) {
                 <label className="text-sm font-medium text-gray-500">
                   Subscription Plan
                 </label>
-                <Input
-                  value={
-                    subscription?.plan_type
-                      ? subscription.plan_type.charAt(0).toUpperCase() +
-                        subscription.plan_type.slice(1)
-                      : "Free"
-                  }
-                  disabled
-                  className="mt-1 bg-gray-50"
-                />
+                <div className="mt-1 flex items-center space-x-2">
+                  <Input
+                    value={subscription ? "Paid" : "Free"}
+                    disabled
+                    className="bg-gray-50"
+                  />
+                  {subscription && (
+                    <span
+                      className={`px-2 py-1 text-xs rounded-full ${
+                        subscription.status === "active"
+                          ? "bg-green-100 text-green-800"
+                          : subscription.status === "canceled"
+                          ? "bg-red-100 text-red-800"
+                          : "bg-yellow-100 text-yellow-800"
+                      }`}
+                    >
+                      {subscription.status}
+                    </span>
+                  )}
+                </div>
               </div>
 
               <div>
@@ -682,6 +797,21 @@ export default function UserDetailPage({ params }: PageProps) {
                   className="mt-1 bg-gray-50"
                 />
               </div>
+
+              {subscription && subscription.current_period_end && (
+                <div className="col-span-2">
+                  <label className="text-sm font-medium text-gray-500">
+                    Subscription Period
+                  </label>
+                  <Input
+                    value={`Ends on ${new Date(
+                      subscription.current_period_end
+                    ).toLocaleDateString()}`}
+                    disabled
+                    className="mt-1 bg-gray-50"
+                  />
+                </div>
+              )}
 
               <div>
                 <label className="text-sm font-medium text-gray-500">
@@ -925,6 +1055,26 @@ export default function UserDetailPage({ params }: PageProps) {
               Quick Actions
             </h3>
             <div className="space-y-3">
+              {/* Subscription Management Button */}
+              <button
+                onClick={handleUpgradeToMylancePremium}
+                disabled={upgradingSubscription || !!subscription}
+                className={`w-full flex items-center justify-center p-4 rounded-lg shadow-lg transition-all duration-200 ease-in-out ${
+                  upgradingSubscription || !!subscription
+                    ? "bg-gray-400 cursor-not-allowed text-gray-600"
+                    : "bg-gradient-to-r from-green-500 to-green-600 text-white hover:shadow-xl hover:scale-105 hover:from-green-600 hover:to-green-700 cursor-pointer"
+                }`}
+              >
+                <CreditCard className="h-5 w-5 mr-3" />
+                <span className="font-medium">
+                  {upgradingSubscription
+                    ? "Upgrading..."
+                    : subscription
+                    ? "Already Premium User"
+                    : "Upgrade to Mylance Premium"}
+                </span>
+              </button>
+
               {/* Mark as Onboarded Button */}
               <button
                 onClick={handleMarkAsOnboarded}

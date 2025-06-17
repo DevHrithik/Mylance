@@ -9,14 +9,20 @@ import {
   Video,
   CheckCircle,
   ExternalLink,
+  ArrowRight,
 } from "lucide-react";
 
 interface CalendlyStepProps {
   onNext: () => void;
   onSkip?: () => void;
+  onAlreadyBooked?: () => void;
 }
 
-export function CalendlyStep({ onNext, onSkip }: CalendlyStepProps) {
+export function CalendlyStep({
+  onNext,
+  onSkip,
+  onAlreadyBooked,
+}: CalendlyStepProps) {
   const [isBookingComplete, setIsBookingComplete] = useState(false);
   const calendlyUrl =
     "https://calendly.com/bradley-33/mylance-content-onboarding";
@@ -47,6 +53,14 @@ export function CalendlyStep({ onNext, onSkip }: CalendlyStepProps) {
     }
   };
 
+  const handleAlreadyBookedCall = () => {
+    if (onAlreadyBooked) {
+      onAlreadyBooked();
+    } else {
+      onNext();
+    }
+  };
+
   const handleOpenCalendly = () => {
     window.open(
       calendlyUrl,
@@ -64,7 +78,7 @@ export function CalendlyStep({ onNext, onSkip }: CalendlyStepProps) {
 
       <div className="relative z-10 max-w-2xl w-full">
         <div className="text-center mb-8">
-          <span className="text-teal-600 text-xl font-medium">18 →</span>
+          <span className="text-teal-600 text-xl font-medium">17 →</span>
           <h1 className="text-3xl font-normal text-gray-900 mt-4 mb-6">
             Let&apos;s Schedule Your Strategy Call
           </h1>
@@ -169,21 +183,30 @@ export function CalendlyStep({ onNext, onSkip }: CalendlyStepProps) {
                   />
                 </div>
 
-                <div className="flex space-x-3">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <Button
                     onClick={handleOpenCalendly}
-                    className="flex-1 bg-gradient-to-br from-blue-600 to-teal-600 hover:from-blue-700 hover:to-teal-700"
+                    className="bg-gradient-to-br from-blue-600 to-teal-600 hover:from-blue-700 hover:to-teal-700"
                   >
                     <ExternalLink className="h-4 w-4 mr-2" />
                     Open in New Window
                   </Button>
 
                   <Button
+                    onClick={handleAlreadyBookedCall}
+                    className="bg-gradient-to-br from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700"
+                  >
+                    <CheckCircle className="h-4 w-4 mr-2" />I Already Booked My
+                    Call
+                  </Button>
+
+                  <Button
                     variant="outline"
                     onClick={handleSkip}
-                    className="flex-1"
+                    className="border-gray-300 hover:border-gray-400"
                   >
                     Book Later
+                    <ArrowRight className="h-4 w-4 ml-2" />
                   </Button>
                 </div>
               </div>

@@ -15,8 +15,8 @@ export function isMondayWednesdayFriday(dateString: string): boolean {
   }
 
   const [year, month, day] = parts;
-  const date = new Date(Date.UTC(year!, month! - 1, day!));
-  const dayOfWeek = date.getUTCDay();
+  const date = new Date(year!, month! - 1, day!);
+  const dayOfWeek = date.getDay();
   return dayOfWeek === 1 || dayOfWeek === 3 || dayOfWeek === 5; // Mon=1, Wed=3, Fri=5
 }
 
@@ -42,8 +42,8 @@ export function getDayName(dateString: string): string {
   }
 
   const [year, month, day] = parts;
-  const date = new Date(Date.UTC(year!, month! - 1, day!));
-  const dayName = dayNames[date.getUTCDay()];
+  const date = new Date(year!, month! - 1, day!);
+  const dayName = dayNames[date.getDay()];
   return dayName || "Invalid Date";
 }
 
@@ -75,12 +75,12 @@ export function formatDateForDisplay(dateString: string): string {
   }
 
   const [year, month, day] = parts;
-  const date = new Date(Date.UTC(year!, month! - 1, day!));
+  const date = new Date(year!, month! - 1, day!);
 
-  const dayName = dayNames[date.getUTCDay()];
-  const monthName = monthNames[date.getUTCMonth()];
+  const dayName = dayNames[date.getDay()];
+  const monthName = monthNames[date.getMonth()];
 
-  return `${dayName}, ${monthName} ${date.getUTCDate()}`;
+  return `${dayName}, ${monthName} ${date.getDate()}`;
 }
 
 /**
@@ -89,30 +89,32 @@ export function formatDateForDisplay(dateString: string): string {
  * @returns Next M/W/F date in YYYY-MM-DD format
  */
 export function getNextMWFDate(fromDate?: string): string {
-  const today = fromDate ? new Date(fromDate + "T00:00:00Z") : new Date();
+  const today = fromDate ? new Date(fromDate + "T00:00:00") : new Date();
   const currentDate = new Date(
-    Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())
+    today.getFullYear(),
+    today.getMonth(),
+    today.getDate()
   );
 
   // Target days (1 = Monday, 3 = Wednesday, 5 = Friday)
   const targetDays = [1, 3, 5];
 
   // If current date is already M/W/F, return it
-  if (targetDays.includes(currentDate.getUTCDay())) {
-    const year = currentDate.getUTCFullYear();
-    const month = String(currentDate.getUTCMonth() + 1).padStart(2, "0");
-    const day = String(currentDate.getUTCDate()).padStart(2, "0");
+  if (targetDays.includes(currentDate.getDay())) {
+    const year = currentDate.getFullYear();
+    const month = String(currentDate.getMonth() + 1).padStart(2, "0");
+    const day = String(currentDate.getDate()).padStart(2, "0");
     return `${year}-${month}-${day}`;
   }
 
   // Find next M/W/F
-  while (!targetDays.includes(currentDate.getUTCDay())) {
-    currentDate.setUTCDate(currentDate.getUTCDate() + 1);
+  while (!targetDays.includes(currentDate.getDay())) {
+    currentDate.setDate(currentDate.getDate() + 1);
   }
 
-  const year = currentDate.getUTCFullYear();
-  const month = String(currentDate.getUTCMonth() + 1).padStart(2, "0");
-  const day = String(currentDate.getUTCDate()).padStart(2, "0");
+  const year = currentDate.getFullYear();
+  const month = String(currentDate.getMonth() + 1).padStart(2, "0");
+  const day = String(currentDate.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
 
@@ -128,38 +130,40 @@ export function generateMWFScheduleDates(
 ): string[] {
   const dates: string[] = [];
 
-  // Use UTC to avoid timezone issues
-  const today = startDate ? new Date(startDate + "T00:00:00Z") : new Date();
+  // Use local time to avoid timezone issues
+  const today = startDate ? new Date(startDate + "T00:00:00") : new Date();
   const currentDate = new Date(
-    Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())
+    today.getFullYear(),
+    today.getMonth(),
+    today.getDate()
   );
 
   // Define target days (1 = Monday, 3 = Wednesday, 5 = Friday)
   const targetDays = [1, 3, 5];
 
   // Start from today or next valid day
-  while (!targetDays.includes(currentDate.getUTCDay())) {
-    currentDate.setUTCDate(currentDate.getUTCDate() + 1);
+  while (!targetDays.includes(currentDate.getDay())) {
+    currentDate.setDate(currentDate.getDate() + 1);
   }
 
   for (let i = 0; i < count; i++) {
     // Add current date in YYYY-MM-DD format
-    const year = currentDate.getUTCFullYear();
-    const month = String(currentDate.getUTCMonth() + 1).padStart(2, "0");
-    const day = String(currentDate.getUTCDate()).padStart(2, "0");
+    const year = currentDate.getFullYear();
+    const month = String(currentDate.getMonth() + 1).padStart(2, "0");
+    const day = String(currentDate.getDate()).padStart(2, "0");
     dates.push(`${year}-${month}-${day}`);
 
     // Move to next M/W/F
-    const currentDay = currentDate.getUTCDay();
+    const currentDay = currentDate.getDay();
     if (currentDay === 1) {
       // Monday -> Wednesday (add 2 days)
-      currentDate.setUTCDate(currentDate.getUTCDate() + 2);
+      currentDate.setDate(currentDate.getDate() + 2);
     } else if (currentDay === 3) {
       // Wednesday -> Friday (add 2 days)
-      currentDate.setUTCDate(currentDate.getUTCDate() + 2);
+      currentDate.setDate(currentDate.getDate() + 2);
     } else if (currentDay === 5) {
       // Friday -> Monday (add 3 days)
-      currentDate.setUTCDate(currentDate.getUTCDate() + 3);
+      currentDate.setDate(currentDate.getDate() + 3);
     }
   }
 
@@ -188,11 +192,11 @@ export function validateMWFDate(dateString: string): {
   }
 
   const [year, month, day] = parts;
-  const date = new Date(Date.UTC(year!, month! - 1, day!));
+  const date = new Date(year!, month! - 1, day!);
   if (
-    date.getUTCFullYear() !== year ||
-    date.getUTCMonth() !== month! - 1 ||
-    date.getUTCDate() !== day
+    date.getFullYear() !== year ||
+    date.getMonth() !== month! - 1 ||
+    date.getDate() !== day
   ) {
     return { isValid: false, error: "Invalid date" };
   }

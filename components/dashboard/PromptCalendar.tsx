@@ -178,17 +178,17 @@ export function PromptCalendar({
     // Get all unique weeks that have prompts
     const weeksWithPrompts = new Set<string>();
     filteredPrompts.forEach((prompt) => {
-      const date = new Date(prompt.scheduled_date! + "T00:00:00Z");
+      const date = new Date(prompt.scheduled_date! + "T00:00:00");
       // Get Monday of this week (week start)
-      const dayOfWeek = date.getUTCDay();
+      const dayOfWeek = date.getDay();
       const monday = new Date(date);
       // If it's Sunday (0), go back 6 days to Monday, otherwise go back dayOfWeek-1 days
       const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-      monday.setUTCDate(date.getUTCDate() - daysToMonday);
+      monday.setDate(date.getDate() - daysToMonday);
 
-      const weekKey = `${monday.getUTCFullYear()}-${String(
-        monday.getUTCMonth() + 1
-      ).padStart(2, "0")}-${String(monday.getUTCDate()).padStart(2, "0")}`;
+      const weekKey = `${monday.getFullYear()}-${String(
+        monday.getMonth() + 1
+      ).padStart(2, "0")}-${String(monday.getDate()).padStart(2, "0")}`;
       weeksWithPrompts.add(weekKey);
     });
 
@@ -199,34 +199,31 @@ export function PromptCalendar({
     const sortedWeeks = Array.from(weeksWithPrompts).sort();
 
     sortedWeeks.forEach((weekStart) => {
-      const mondayDate = new Date(weekStart + "T00:00:00Z");
+      const mondayDate = new Date(weekStart + "T00:00:00");
 
       // Generate Monday, Wednesday, Friday for this week
       const postingDays = [0, 2, 4]; // Monday, Wednesday, Friday (offset from Monday)
 
       postingDays.forEach((dayOffset) => {
         const currentDate = new Date(mondayDate);
-        currentDate.setUTCDate(mondayDate.getUTCDate() + dayOffset);
+        currentDate.setDate(mondayDate.getDate() + dayOffset);
 
-        const dateString = `${currentDate.getUTCFullYear()}-${String(
-          currentDate.getUTCMonth() + 1
-        ).padStart(2, "0")}-${String(currentDate.getUTCDate()).padStart(
-          2,
-          "0"
-        )}`;
+        const dateString = `${currentDate.getFullYear()}-${String(
+          currentDate.getMonth() + 1
+        ).padStart(2, "0")}-${String(currentDate.getDate()).padStart(2, "0")}`;
 
         // Get prompts for this specific date
         const dayPrompts = filteredPrompts.filter(
           (prompt) => prompt.scheduled_date === dateString
         );
 
-        const dayName = weekDays[currentDate.getUTCDay()];
-        const monthName = monthNames[currentDate.getUTCMonth()];
+        const dayName = weekDays[currentDate.getDay()];
+        const monthName = monthNames[currentDate.getMonth()];
 
         daysWithPrompts.push({
           date: dateString,
           dayName: dayName || "Unknown",
-          dayNumber: currentDate.getUTCDate(),
+          dayNumber: currentDate.getDate(),
           monthName: monthName || "Unknown",
           prompts: dayPrompts,
         });
@@ -290,25 +287,25 @@ export function PromptCalendar({
     if (!firstDay || !lastDay) return "No scheduled prompts";
 
     // Calculate the full week range (Monday to Sunday)
-    const firstDate = new Date(firstDay.date + "T00:00:00Z");
-    
+    const firstDate = new Date(firstDay.date + "T00:00:00");
+
     // Find the Monday of the first date's week
-    const firstDayOfWeek = firstDate.getUTCDay();
+    const firstDayOfWeek = firstDate.getDay();
     const daysToMonday = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1;
     const monday = new Date(firstDate);
-    monday.setUTCDate(firstDate.getUTCDate() - daysToMonday);
-    
+    monday.setDate(firstDate.getDate() - daysToMonday);
+
     // Find the Sunday of the same week
     const sunday = new Date(monday);
-    sunday.setUTCDate(monday.getUTCDate() + 6);
+    sunday.setDate(monday.getDate() + 6);
 
-    const monthName = monthNames[monday.getUTCMonth()];
-    const mondayNum = monday.getUTCDate();
-    const sundayNum = sunday.getUTCDate();
-    const sundayMonth = monthNames[sunday.getUTCMonth()];
+    const monthName = monthNames[monday.getMonth()];
+    const mondayNum = monday.getDate();
+    const sundayNum = sunday.getDate();
+    const sundayMonth = monthNames[sunday.getMonth()];
 
     // If the week spans two months
-    if (monday.getUTCMonth() !== sunday.getUTCMonth()) {
+    if (monday.getMonth() !== sunday.getMonth()) {
       return `${monthName} ${mondayNum} - ${sundayMonth} ${sundayNum}`;
     } else {
       return `${monthName} ${mondayNum}-${sundayNum}`;

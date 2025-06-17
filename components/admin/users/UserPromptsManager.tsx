@@ -662,8 +662,8 @@ export default function UserPromptsManager({
                           const selectedDate = e.target.value;
                           if (selectedDate) {
                             // Validate it's M/W/F
-                            const date = new Date(selectedDate + "T00:00:00Z");
-                            const dayOfWeek = date.getUTCDay();
+                            const date = new Date(selectedDate + "T00:00:00");
+                            const dayOfWeek = date.getDay();
                             if (
                               dayOfWeek !== 1 &&
                               dayOfWeek !== 3 &&
@@ -906,8 +906,8 @@ export default function UserPromptsManager({
                   const selectedDate = e.target.value;
                   if (selectedDate) {
                     // Validate it's M/W/F
-                    const date = new Date(selectedDate + "T00:00:00Z");
-                    const dayOfWeek = date.getUTCDay();
+                    const date = new Date(selectedDate + "T00:00:00");
+                    const dayOfWeek = date.getDay();
                     if (dayOfWeek !== 1 && dayOfWeek !== 3 && dayOfWeek !== 5) {
                       toast.error(
                         "Please select Monday, Wednesday, or Friday only"

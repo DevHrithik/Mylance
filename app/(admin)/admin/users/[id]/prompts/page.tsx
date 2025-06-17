@@ -292,12 +292,23 @@ export default function UserPromptsPage({ params }: PageProps) {
       prompt.pillar_description ||
       `Pillar ${prompt.pillar_number}`;
 
+    // Ensure the date is in YYYY-MM-DD format for the date input
+    const formatDateForInput = (dateString: string) => {
+      if (!dateString) return "";
+      // If it's already in YYYY-MM-DD format, return as is
+      if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+        return dateString;
+      }
+      // For any other format, just extract the date part to avoid timezone issues
+      return dateString.split("T")[0];
+    };
+
     setEditForm({
       category: prompt.category,
       pillar_description: actualPillarDescription,
       prompt_text: prompt.prompt_text,
       hook: prompt.hook,
-      scheduled_date: prompt.scheduled_date,
+      scheduled_date: formatDateForInput(prompt.scheduled_date),
     });
   };
 
@@ -306,21 +317,45 @@ export default function UserPromptsPage({ params }: PageProps) {
 
     try {
       const supabase = createClient();
-      const { error } = await supabase
+
+      // Ensure the scheduled date is properly formatted - avoid any Date parsing to prevent timezone issues
+      const formatDateForDatabase = (dateString: string) => {
+        if (!dateString) return null;
+        // Keep it simple - if it's in YYYY-MM-DD format, return as is
+        return dateString.split("T")[0];
+      };
+
+      const formattedDate = formatDateForDatabase(editForm.scheduled_date);
+
+      console.log("Updating prompt:", editingPrompt.id, "with data:", {
+        category: editForm.category,
+        pillar_description: editForm.pillar_description,
+        prompt_text: editForm.prompt_text,
+        hook: editForm.hook,
+        scheduled_date: formattedDate,
+      });
+
+      const { data, error } = await supabase
         .from("content_prompts")
         .update({
           category: editForm.category,
           pillar_description: editForm.pillar_description,
           prompt_text: editForm.prompt_text,
           hook: editForm.hook,
-          scheduled_date: editForm.scheduled_date,
+          scheduled_date: formattedDate,
+          updated_at: new Date().toISOString(),
         })
-        .eq("id", editingPrompt.id);
+        .eq("id", editingPrompt.id)
+        .select();
 
       if (error) {
-        throw new Error("Failed to update prompt");
+        console.error("Database update error:", error);
+        throw new Error(`Failed to update prompt: ${error.message}`);
       }
 
+      console.log("Database update successful:", data);
+
+      // Update local state
       setPrompts((prev) =>
         prev.map((prompt) =>
           prompt.id === editingPrompt.id
@@ -330,7 +365,7 @@ export default function UserPromptsPage({ params }: PageProps) {
                 pillar_description: editForm.pillar_description,
                 prompt_text: editForm.prompt_text,
                 hook: editForm.hook,
-                scheduled_date: editForm.scheduled_date,
+                scheduled_date: formattedDate || editForm.scheduled_date,
               }
             : prompt
         )
@@ -338,6 +373,11 @@ export default function UserPromptsPage({ params }: PageProps) {
 
       setEditingPrompt(null);
       toast.success("Prompt updated successfully!");
+
+      // Refresh data from database to ensure consistency
+      setTimeout(() => {
+        fetchData();
+      }, 500);
     } catch (error) {
       console.error("Error updating prompt:", error);
       toast.error("Failed to update prompt");

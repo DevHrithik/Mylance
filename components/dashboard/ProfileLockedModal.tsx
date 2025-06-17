@@ -29,7 +29,7 @@ export function ProfileLockedModal({
   const [isBookingComplete, setIsBookingComplete] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const calendlyUrl =
-    "https://calendly.com/mylance-customer/mylance-thought-leadership-onboarding";
+    "https://calendly.com/bradley-33/mylance-content-onboarding";
   const router = useRouter();
   const supabase = createClient();
 
