@@ -348,14 +348,22 @@ export async function middleware(request: NextRequest) {
         url.pathname = "/onboarding";
         return createRedirectResponse(url, request);
       }
+      // Always allow access to product page regardless of subscription status
+      // This is where users go to subscribe after onboarding
       return supabaseResponse;
     }
 
+    // Allow access to dashboard if coming from successful payment (even if webhook hasn't processed yet)
+    const isPaymentSuccess =
+      request.nextUrl.searchParams.get("payment") === "success";
+
     // If onboarding is complete but no active subscription, force user to /product for all dashboard/protected routes
+    // EXCEPT when they're coming from successful payment
     if (
       hasCompletedOnboarding &&
       !isAdmin &&
       !hasActiveSubscription &&
+      !isPaymentSuccess &&
       (pathname.startsWith("/dashboard") ||
         pathname.startsWith("/analytics") ||
         pathname.startsWith("/billing") ||
@@ -367,6 +375,9 @@ export async function middleware(request: NextRequest) {
         pathname.startsWith("/resources") ||
         pathname.startsWith("/posts"))
     ) {
+      console.log(
+        `Middleware: User without subscription accessing ${pathname}, redirecting to product`
+      );
       const url = request.nextUrl.clone();
       url.pathname = "/product";
       return createRedirectResponse(url, request);

@@ -172,36 +172,63 @@ export function OnboardingWizard() {
     // After step 16, save onboarding data and redirect to product page
     if (currentStep === 16) {
       setIsLoading(true);
-      console.log("Step 16: Starting onboarding completion process...");
+      console.log("Step 16: Completing onboarding...");
 
       try {
-        console.log("Step 16: Saving onboarding data...");
-        await handleOnboardingDataSubmit();
-        console.log(
-          "Step 16: Data saved successfully, redirecting to product page..."
-        );
-
-        // Clear the onboarding progress since it's complete
         const {
           data: { user },
         } = await supabase.auth.getUser();
 
-        if (user) {
-          console.log("Step 16: Clearing onboarding progress...");
-          await supabase
-            .from("onboarding_progress")
-            .delete()
-            .eq("user_id", user.id);
+        if (!user) {
+          throw new Error("User not authenticated");
         }
 
-        // Small delay to ensure database updates are processed
-        await new Promise((resolve) => setTimeout(resolve, 500));
+        console.log(
+          "Step 16: Saving onboarding data with onboarding_completed = true..."
+        );
 
-        // Redirect to product page
-        console.log("Onboarding completed! Redirecting to product page...");
+        // Update user profile with onboarding data and mark as completed
+        const { error: profileError } = await supabase.from("profiles").upsert({
+          id: user.id,
+          email: data.email,
+          first_name: data.firstName,
+          linkedin_url: data.linkedinUrl,
+          business_type: data.businessType,
+          business_size: data.businessSize,
+          business_stage: data.businessStage,
+          linkedin_importance: data.linkedinImportance,
+          investment_willingness: data.investmentWillingness,
+          posting_mindset: data.postingMindset,
+          current_posting_frequency: data.currentPostingFrequency,
+          client_attraction_methods: data.clientAttractionMethods,
+          ideal_target_client: data.idealTargetClient,
+          client_pain_points: data.clientPainPoints,
+          unique_value_proposition: data.uniqueValueProposition,
+          proof_points: data.proofPoints,
+          heard_about_mylance: data.heardAboutMylance,
+          heard_about_mylance_other: data.heardAboutMylanceOther,
+          onboarding_completed: true,
+          updated_at: new Date().toISOString(),
+        });
 
-        // Force a hard redirect to prevent middleware conflicts
-        window.location.href = "/product";
+        if (profileError) {
+          console.error("Profile update error:", profileError);
+          throw new Error(`Failed to save profile: ${profileError.message}`);
+        }
+
+        console.log("✅ Profile updated with onboarding_completed = true");
+
+        // Clear the onboarding progress since it's complete
+        console.log("Step 16: Clearing onboarding progress...");
+        await supabase
+          .from("onboarding_progress")
+          .delete()
+          .eq("user_id", user.id);
+
+        console.log("✅ Onboarding completed! Redirecting to product page...");
+
+        // Simple redirect to product page
+        router.push("/product");
         return;
       } catch (err: any) {
         console.error("Failed to complete onboarding:", err);
@@ -222,69 +249,6 @@ export function OnboardingWizard() {
   const handleBack = () => {
     if (currentStep > 1) {
       setCurrentStep(currentStep - 1);
-    }
-  };
-
-  const handleOnboardingDataSubmit = async () => {
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
-
-    if (userError || !user) {
-      throw new Error("User not authenticated");
-    }
-
-    // Update user profile with onboarding data
-    const { error: profileError } = await supabase.from("profiles").upsert({
-      id: user.id,
-      email: data.email,
-      first_name: data.firstName,
-      linkedin_url: data.linkedinUrl,
-      business_type: data.businessType,
-      business_size: data.businessSize,
-      business_stage: data.businessStage,
-      linkedin_importance: data.linkedinImportance,
-      investment_willingness: data.investmentWillingness,
-      posting_mindset: data.postingMindset,
-      current_posting_frequency: data.currentPostingFrequency,
-      client_attraction_methods: data.clientAttractionMethods,
-      ideal_target_client: data.idealTargetClient,
-      client_pain_points: data.clientPainPoints,
-      unique_value_proposition: data.uniqueValueProposition,
-      proof_points: data.proofPoints,
-      heard_about_mylance: data.heardAboutMylance,
-      heard_about_mylance_other: data.heardAboutMylanceOther,
-      onboarding_completed: true,
-      updated_at: new Date().toISOString(),
-    });
-
-    if (profileError) {
-      console.error("Profile update error:", profileError);
-      throw new Error(`Failed to update profile: ${profileError.message}`);
-    }
-
-    console.log("Profile updated successfully with onboarding data");
-
-    // Create a default subscription record to prevent redirect loops
-    // This will be a "free" plan that gets upgraded when payment is complete
-    const { error: subscriptionError } = await supabase
-      .from("subscriptions")
-      .upsert({
-        user_id: user.id,
-        plan_type: "free",
-        status: "active",
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      });
-
-    if (subscriptionError) {
-      console.error("Subscription creation error:", subscriptionError);
-      // Don't throw error here as profile update succeeded
-      // User can still proceed to product page
-      console.log("Continuing without subscription record...");
-    } else {
-      console.log("Default subscription record created successfully");
     }
   };
 

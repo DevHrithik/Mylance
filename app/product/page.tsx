@@ -68,16 +68,7 @@ export default function ProductPage() {
     }
   };
 
-  // Auto-redirect to dashboard after successful payment
-  useEffect(() => {
-    if (
-      paymentStatus === "success" &&
-      (hasAccess || isAdmin) &&
-      !subscriptionLoading
-    ) {
-      router.replace("/dashboard");
-    }
-  }, [paymentStatus, hasAccess, isAdmin, subscriptionLoading, router]);
+  // No auto-redirect needed - Stripe handles the redirect to dashboard directly
 
   if (subscriptionLoading) {
     return (
@@ -90,22 +81,33 @@ export default function ProductPage() {
     );
   }
 
-  // Show go to dashboard button for users with access (including free plans)
-  if (hasAccess || isAdmin) {
+  // Redirect admins to admin panel if they access product page directly
+  if (isAdmin) {
+    router.replace("/admin");
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
+          <p>Redirecting to admin panel...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // If user already has access, show them a button to go to dashboard
+  if (hasAccess && !subscriptionLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center p-6">
         <div className="text-center max-w-md">
-          <h2 className="text-2xl font-bold mb-4">Welcome to Mylance!</h2>
+          <h2 className="text-2xl font-bold mb-4">Welcome back!</h2>
           <p className="text-gray-600 mb-6">
-            {isAdmin
-              ? "You have admin access to Mylance."
-              : "Your account is ready! Start creating content on your dashboard."}
+            Your account is ready! Start creating content on your dashboard.
           </p>
           <Button
-            onClick={() => router.push(isAdmin ? "/admin" : "/dashboard")}
+            onClick={() => router.push("/dashboard")}
             className="bg-teal-500 hover:bg-teal-600 text-white px-6 py-3"
           >
-            Go to {isAdmin ? "Admin Panel" : "Dashboard"}
+            Go to Dashboard
           </Button>
         </div>
       </div>
