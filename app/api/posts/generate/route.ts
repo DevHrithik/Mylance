@@ -123,34 +123,53 @@ export async function POST(request: NextRequest) {
 
       const instructions = [];
 
+      // Helper function to ensure array conversion
+      const ensureArray = (value: any): string[] => {
+        if (!value) return [];
+        if (Array.isArray(value)) return value;
+        if (typeof value === "string") {
+          try {
+            const parsed = JSON.parse(value);
+            return Array.isArray(parsed) ? parsed : [value];
+          } catch {
+            return [value];
+          }
+        }
+        return [];
+      };
+
       // Lexical choices
-      if (prefs.frequently_used_words?.length > 0) {
+      const frequentlyUsedWords = ensureArray(prefs.frequently_used_words);
+      if (frequentlyUsedWords.length > 0) {
         instructions.push(
-          `- Naturally incorporate these preferred words/phrases where appropriate: ${prefs.frequently_used_words
+          `- Naturally incorporate these preferred words/phrases where appropriate: ${frequentlyUsedWords
             .slice(0, 10)
             .join(", ")}`
         );
       }
 
-      if (prefs.industry_jargon?.length > 0) {
+      const industryJargon = ensureArray(prefs.industry_jargon);
+      if (industryJargon.length > 0) {
         instructions.push(
-          `- Use these industry terms when relevant: ${prefs.industry_jargon
+          `- Use these industry terms when relevant: ${industryJargon
             .slice(0, 8)
             .join(", ")}`
         );
       }
 
-      if (prefs.signature_expressions?.length > 0) {
+      const signatureExpressions = ensureArray(prefs.signature_expressions);
+      if (signatureExpressions.length > 0) {
         instructions.push(
-          `- Try to include these signature expressions naturally: ${prefs.signature_expressions
+          `- Try to include these signature expressions naturally: ${signatureExpressions
             .slice(0, 3)
             .join(", ")}`
         );
       }
 
-      if (prefs.never_use_phrases?.length > 0) {
+      const neverUsePhrases = ensureArray(prefs.never_use_phrases);
+      if (neverUsePhrases.length > 0) {
         instructions.push(
-          `- AVOID these words/phrases: ${prefs.never_use_phrases.join(", ")}`
+          `- AVOID these words/phrases: ${neverUsePhrases.join(", ")}`
         );
       }
 
@@ -170,9 +189,10 @@ export async function POST(request: NextRequest) {
       }
 
       // Structural patterns
-      if (prefs.structural_patterns?.length > 0) {
+      const structuralPatterns = ensureArray(prefs.structural_patterns);
+      if (structuralPatterns.length > 0) {
         instructions.push(
-          `- Preferred formats: ${prefs.structural_patterns.join(", ")}`
+          `- Preferred formats: ${structuralPatterns.join(", ")}`
         );
       }
 
@@ -323,9 +343,10 @@ export async function POST(request: NextRequest) {
       }
 
       // Preferred hooks
-      if (prefs.preferred_hooks?.length > 0) {
+      const preferredHooks = ensureArray(prefs.preferred_hooks);
+      if (preferredHooks.length > 0) {
         instructions.push(
-          `- Hook style examples to emulate: "${prefs.preferred_hooks
+          `- Hook style examples to emulate: "${preferredHooks
             .slice(0, 2)
             .join('", "')}"`
         );
