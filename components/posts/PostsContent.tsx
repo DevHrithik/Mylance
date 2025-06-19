@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -216,10 +216,24 @@ export function PostsContent({
     }
   };
 
+  // Track the last processed highlight params to prevent duplicates
+  const lastProcessedParams = useRef<{ draft?: string; updated?: string }>({});
+
   useEffect(() => {
     console.log("🔥 USEEFFECT TRIGGERED - Starting highlight logic");
     const draftId = searchParams.draft;
     const updatedId = searchParams.updated;
+
+    // Skip if we've already processed these exact params
+    const currentParams = { draft: draftId, updated: updatedId };
+    if (
+      lastProcessedParams.current.draft === draftId &&
+      lastProcessedParams.current.updated === updatedId &&
+      (draftId || updatedId)
+    ) {
+      console.log("PostsContent: Already processed these params, skipping");
+      return;
+    }
 
     console.log("PostsContent: searchParams:", {
       draftId,
@@ -264,6 +278,10 @@ export function PostsContent({
       // Ensure targetId is a string for consistent comparison
       const targetIdStr = String(targetId);
       setHighlightedPostId(targetIdStr);
+
+      // Mark these params as processed
+      if (draftId) lastProcessedParams.current.draft = draftId;
+      if (updatedId) lastProcessedParams.current.updated = updatedId;
 
       const message =
         highlightType === "draft"
@@ -338,7 +356,7 @@ export function PostsContent({
         window.history.replaceState({}, "", url.toString());
       }, 8000);
     }
-  }, [searchParams.draft, searchParams.updated, data.posts]);
+  }, [searchParams.draft, searchParams.updated]); // Removed data.posts to prevent infinite loop
 
   useEffect(() => {
     let filtered = data.posts;
