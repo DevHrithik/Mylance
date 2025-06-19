@@ -2,6 +2,11 @@
 
 import { useState, useEffect, useCallback, use } from "react";
 import { createClient } from "@/lib/supabase/client";
+import {
+  formatSimpleDate,
+  formatDateForInput,
+  formatDateForDatabase,
+} from "@/lib/utils/date";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -292,23 +297,12 @@ export default function UserPromptsPage({ params }: PageProps) {
       prompt.pillar_description ||
       `Pillar ${prompt.pillar_number}`;
 
-    // Ensure the date is in YYYY-MM-DD format for the date input
-    const formatDateForInput = (dateString: string | null) => {
-      if (!dateString) return "";
-      // If it's already in YYYY-MM-DD format, return as is
-      if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
-        return dateString;
-      }
-      // For any other format, just extract the date part to avoid timezone issues
-      return dateString.split("T")[0];
-    };
-
     setEditForm({
       category: prompt.category,
       pillar_description: actualPillarDescription,
       prompt_text: prompt.prompt_text,
       hook: prompt.hook,
-      scheduled_date: formatDateForInput(prompt.scheduled_date) || "",
+      scheduled_date: formatDateForInput(prompt.scheduled_date),
     });
   };
 
@@ -317,13 +311,6 @@ export default function UserPromptsPage({ params }: PageProps) {
 
     try {
       const supabase = createClient();
-
-      // Ensure the scheduled date is properly formatted - avoid any Date parsing to prevent timezone issues
-      const formatDateForDatabase = (dateString: string) => {
-        if (!dateString) return null;
-        // Keep it simple - if it's in YYYY-MM-DD format, return as is
-        return dateString.split("T")[0];
-      };
 
       const formattedDate = formatDateForDatabase(editForm.scheduled_date);
 
@@ -504,7 +491,11 @@ export default function UserPromptsPage({ params }: PageProps) {
             <h1 className="text-3xl font-bold text-gray-900">
               Content Prompts for {userName}
             </h1>
-            <p className="text-gray-600">{prompts.length} prompts total</p>
+            <div className="flex items-center gap-4 text-gray-600">
+              <p>{user.email}</p>
+              <span className="text-gray-400">•</span>
+              <p>{prompts.length} prompts total</p>
+            </div>
             {activeFilter !== "all" && (
               <div className="flex items-center space-x-2 mt-1">
                 <Badge variant="secondary" className="text-xs">
@@ -774,8 +765,7 @@ export default function UserPromptsPage({ params }: PageProps) {
                 {/* Footer */}
                 <div className="flex items-center justify-between pt-4 border-t border-gray-200">
                   <div className="text-sm text-gray-500">
-                    Scheduled for:{" "}
-                    {new Date(prompt.scheduled_date ?? "").toLocaleDateString()}
+                    Scheduled for: {formatSimpleDate(prompt.scheduled_date)}
                   </div>
                   <div className="text-xs text-gray-400">
                     Created {new Date(prompt.created_at).toLocaleDateString()}

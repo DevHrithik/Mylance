@@ -374,35 +374,20 @@ export function PostsContent({
         if (String(b.id) === highlightIdStr) return 1;
       }
 
-      const now = new Date();
-      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      // Get the most relevant date for each post for sorting
+      // Priority: scheduled_date > posted_at > updated_at > created_at
+      const getRelevantDate = (post: Post) => {
+        if (post.scheduled_date) return new Date(post.scheduled_date);
+        if (post.posted_at) return new Date(post.posted_at);
+        if (post.updated_at) return new Date(post.updated_at);
+        return new Date(post.created_at);
+      };
 
-      const aScheduled =
-        a.scheduled_date && new Date(a.scheduled_date) >= today;
-      const bScheduled =
-        b.scheduled_date && new Date(b.scheduled_date) >= today;
+      const aDate = getRelevantDate(a);
+      const bDate = getRelevantDate(b);
 
-      // Prioritize scheduled posts for future dates
-      if (aScheduled && !bScheduled) return -1;
-      if (!aScheduled && bScheduled) return 1;
-
-      // For scheduled posts, sort by schedule date (earliest first)
-      if (aScheduled && bScheduled) {
-        return (
-          new Date(a.scheduled_date!).getTime() -
-          new Date(b.scheduled_date!).getTime()
-        );
-      }
-
-      // Prioritize drafts over other non-scheduled posts
-      if (a.status === "draft" && b.status !== "draft") return -1;
-      if (a.status !== "draft" && b.status === "draft") return 1;
-
-      // For all other posts, sort by the most relevant date (latest first)
-      const aDate = a.posted_at || a.updated_at || a.created_at;
-      const bDate = b.posted_at || b.updated_at || b.created_at;
-
-      return new Date(bDate).getTime() - new Date(aDate).getTime();
+      // Sort from furthest in the future to the past (reverse chronological)
+      return bDate.getTime() - aDate.getTime();
     });
   }, [filteredPosts, highlightedPostId]);
 

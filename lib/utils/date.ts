@@ -3,6 +3,8 @@
  * Ensures consistent M/W/F scheduling regardless of timezone
  */
 
+import { formatDistanceToNow, format } from "date-fns";
+
 /**
  * Checks if a date is Monday, Wednesday, or Friday
  * @param dateString Date in YYYY-MM-DD format
@@ -210,4 +212,84 @@ export function validateMWFDate(dateString: string): {
   }
 
   return { isValid: true };
+}
+
+/**
+ * Simple date formatting that avoids timezone issues
+ * Takes a YYYY-MM-DD string and returns a formatted date
+ */
+export function formatSimpleDate(
+  dateString: string | null | undefined
+): string {
+  if (!dateString) return "Not scheduled";
+
+  // For YYYY-MM-DD format, add time to avoid timezone shifts
+  const date = new Date(dateString + "T00:00:00");
+  return date.toLocaleDateString();
+}
+
+/**
+ * Format date for date input (ensures YYYY-MM-DD format)
+ */
+export function formatDateForInput(
+  dateString: string | null | undefined
+): string {
+  if (!dateString) return "";
+
+  // If it's already in YYYY-MM-DD format, return as is
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+    return dateString;
+  }
+
+  // For any other format, extract date part
+  return dateString.split("T")[0] || "";
+}
+
+/**
+ * Format date for database storage (simple YYYY-MM-DD)
+ */
+export function formatDateForDatabase(dateString: string): string | null {
+  if (!dateString) return null;
+
+  // Keep it simple - extract just the date part
+  return dateString.split("T")[0] || "";
+}
+
+/**
+ * Get next Monday from any date
+ */
+export function getNextMonday(): Date {
+  const today = new Date();
+  const nextMonday = new Date(today);
+
+  // Get days until next Monday (1 = Monday, 0 = Sunday)
+  const daysUntilMonday = (1 + 7 - today.getDay()) % 7 || 7;
+  nextMonday.setDate(today.getDate() + daysUntilMonday);
+
+  return nextMonday;
+}
+
+/**
+ * Generate Monday/Wednesday/Friday schedule starting from next Monday
+ */
+export function generateMWFSchedule(promptCount: number = 12): string[] {
+  const dates: string[] = [];
+  const nextMonday = getNextMonday();
+
+  // Mon, Wed, Fri pattern for 6 days (2 prompts per day)
+  const daysToAdd = [0, 2, 4, 7, 9, 11]; // Mon, Wed, Fri, Mon, Wed, Fri
+
+  for (let i = 0; i < promptCount; i++) {
+    const dayIndex = Math.floor(i / 2); // 2 prompts per day
+    const targetDate = new Date(nextMonday);
+    targetDate.setDate(nextMonday.getDate() + (daysToAdd[dayIndex] || 0));
+
+    // Format as YYYY-MM-DD
+    const year = targetDate.getFullYear();
+    const month = String(targetDate.getMonth() + 1).padStart(2, "0");
+    const day = String(targetDate.getDate()).padStart(2, "0");
+    dates.push(`${year}-${month}-${day}`);
+  }
+
+  return dates;
 }

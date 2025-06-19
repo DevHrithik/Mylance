@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { generateMWFSchedule } from "@/lib/utils/date";
 import OpenAI from "openai";
 
 const openai = new OpenAI({
@@ -522,67 +523,13 @@ Generate 12 diverse prompts that cover different categories and pillars. Make th
       );
     }
 
-    // Calculate schedule dates using timezone-safe M/W/F scheduling
-    const getNextScheduleDates = (count: number) => {
-      const dates = [];
-      const promptsPerDay = 2; // Always 2 prompts per day
-
-      // Generate M/W/F dates, with 2 prompts per day
-      const totalDaysNeeded = Math.ceil(count / promptsPerDay);
-
-      // Use UTC to avoid timezone issues
-      const today = new Date();
-      const currentDate = new Date(
-        Date.UTC(today.getFullYear(), today.getMonth(), today.getDate())
-      );
-
-      // Define target days (1 = Monday, 3 = Wednesday, 5 = Friday)
-      const targetDays = [1, 3, 5];
-
-      // Start from today or next valid day
-      while (!targetDays.includes(currentDate.getUTCDay())) {
-        currentDate.setUTCDate(currentDate.getUTCDate() + 1);
-      }
-
-      // Generate M/W/F dates
-      const mwfDates: string[] = [];
-      for (let dayIndex = 0; dayIndex < totalDaysNeeded; dayIndex++) {
-        const year = currentDate.getUTCFullYear();
-        const month = String(currentDate.getUTCMonth() + 1).padStart(2, "0");
-        const day = String(currentDate.getUTCDate()).padStart(2, "0");
-        mwfDates.push(`${year}-${month}-${day}`);
-
-        // Move to next M/W/F
-        const currentDay = currentDate.getUTCDay();
-        if (currentDay === 1) {
-          // Monday -> Wednesday (add 2 days)
-          currentDate.setUTCDate(currentDate.getUTCDate() + 2);
-        } else if (currentDay === 3) {
-          // Wednesday -> Friday (add 2 days)
-          currentDate.setUTCDate(currentDate.getUTCDate() + 2);
-        } else if (currentDay === 5) {
-          // Friday -> Monday (add 3 days)
-          currentDate.setUTCDate(currentDate.getUTCDate() + 3);
-        }
-      }
-
-      // Assign dates to prompts (2 prompts per day max)
-      for (let i = 0; i < count; i++) {
-        const dayIndex = Math.floor(i / promptsPerDay);
-        if (dayIndex < mwfDates.length) {
-          dates.push(mwfDates[dayIndex]);
-        }
-      }
-
-      console.log(
-        "📅 Generated schedule dates (M/W/F only, 2 per day max):",
-        dates
-      );
-      console.log("📅 Unique dates:", [...new Set(dates)]);
-      return dates;
-    };
-
-    const scheduleDates = getNextScheduleDates(finalPrompts.length);
+    // Use the utility function to generate simple, consistent dates
+    const scheduleDates = generateMWFSchedule(finalPrompts.length);
+    console.log(
+      "📅 Generated schedule dates (starting next Monday, Mon/Wed/Fri):",
+      scheduleDates
+    );
+    console.log("📅 Unique dates:", [...new Set(scheduleDates)]);
 
     // Prepare prompts for database insertion
     const promptsForDb = finalPrompts.map((prompt, index) => ({

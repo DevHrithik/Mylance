@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Search,
   Edit3,
@@ -12,14 +12,10 @@ import {
   Loader2,
   AlertCircle,
   Info,
-  CreditCard,
-  Check,
   Shield,
   ChevronDown,
   ChevronUp,
   Quote,
-  Star,
-  Sparkles,
   Rocket,
 } from "lucide-react";
 import { STRIPE_CONFIG } from "@/lib/stripe/config";
@@ -211,6 +207,23 @@ export default function ProductPage() {
             We will help you publish content that attracts clients and builds
             trust — in your voice, on your schedule.
           </p>
+          <div className="mb-6">
+            <div className="flex items-center justify-center gap-3 mb-4">
+              <span className="text-lg text-gray-500 line-through">
+                $279/month
+              </span>
+              <span className="bg-red-500 text-white px-3 py-1 rounded-full text-sm font-semibold">
+                50% OFF BETA
+              </span>
+            </div>
+            <div className="text-sm text-gray-600 mb-4 max-w-md mx-auto">
+              <p className="font-semibold text-orange-600 mb-2">
+                ⚡ Limited Time Beta Pricing
+              </p>
+              <p>• Limited spaces available</p>
+              <p>• Offer ends soon</p>
+            </div>
+          </div>
           <Button
             onClick={handleSubscribe}
             disabled={loading}
@@ -309,17 +322,12 @@ export default function ProductPage() {
             Here is what your content engine looks like: easy-to-follow prompts,
             tailored to your voice, delivered every week.
           </p>
-          <div className="bg-gray-100 rounded-xl p-8 border-2 border-dashed border-gray-300">
-            <div className="flex items-center justify-center h-64">
-              <div className="text-center">
-                <Sparkles className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-500">
-                  Product screenshot coming soon
-                  <br />
-                  Calendar view + example post
-                </p>
-              </div>
-            </div>
+          <div className="bg-white rounded-xl p-4 shadow-2xl border border-gray-200">
+            <img
+              src="/dashboard.png"
+              alt="Mylance Dashboard - Content Calendar and Prompts"
+              className="w-full h-auto rounded-lg"
+            />
           </div>
         </div>
 
@@ -366,9 +374,25 @@ export default function ProductPage() {
           <Card className="bg-gradient-to-br from-blue-600 to-teal-600 border-0 shadow-xl">
             <CardContent className="p-10">
               <div className="text-white">
-                <h2 className="text-3xl md:text-4xl font-bold mb-4">
-                  Start Today — ${STRIPE_CONFIG.PRICE}/month
-                </h2>
+                <div className="mb-6">
+                  <div className="flex items-center justify-center gap-3 mb-2">
+                    <span className="text-xl text-blue-200 line-through">
+                      $279/month
+                    </span>
+                    <span className="bg-red-500 text-white px-3 py-1 rounded-full text-sm font-semibold">
+                      50% OFF BETA
+                    </span>
+                  </div>
+                  <h2 className="text-3xl md:text-4xl font-bold mb-4">
+                    Start Today — ${STRIPE_CONFIG.PRICE}/month
+                  </h2>
+                  <div className="text-blue-100 mb-4 text-sm">
+                    <p className="font-semibold text-yellow-300 mb-2">
+                      ⚡ Limited Time Beta Pricing
+                    </p>
+                    <p>• Limited spaces available • Offer ends soon</p>
+                  </div>
+                </div>
                 <p className="text-blue-100 mb-6 text-lg">
                   No contracts. Cancel anytime.
                 </p>

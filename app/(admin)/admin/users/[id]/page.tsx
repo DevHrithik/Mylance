@@ -15,6 +15,7 @@ import {
   MessageSquare,
   Sparkles,
   CreditCard,
+  ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -48,6 +49,7 @@ interface UserData {
   proof_points: string | null;
   content_strategy: string | null;
   content_pillars: string[];
+  linkedin_url: string | null;
   onboarding_completed: boolean;
   profile_locked: boolean;
   created_at: string;
@@ -77,6 +79,7 @@ export default function UserDetailPage({ params }: PageProps) {
     first_name: "",
     business_type: "",
     business_size: "",
+    linkedin_url: "",
     ideal_target_client: "",
     client_pain_points: "",
     unique_value_proposition: "",
@@ -100,6 +103,7 @@ export default function UserDetailPage({ params }: PageProps) {
         first_name,
         business_type,
         business_size,
+        linkedin_url,
         ideal_target_client,
         client_pain_points,
         unique_value_proposition,
@@ -156,6 +160,7 @@ export default function UserDetailPage({ params }: PageProps) {
       first_name: userData.first_name || "",
       business_type: userData.business_type || "",
       business_size: userData.business_size || "",
+      linkedin_url: userData.linkedin_url || "",
       ideal_target_client: userData.ideal_target_client || "",
       client_pain_points: userData.client_pain_points || "",
       unique_value_proposition: userData.unique_value_proposition || "",
@@ -229,6 +234,7 @@ export default function UserDetailPage({ params }: PageProps) {
       first_name: formData.first_name,
       business_type: formData.business_type,
       business_size: formData.business_size,
+      linkedin_url: formData.linkedin_url,
     };
 
     const { error } = await supabase
@@ -247,6 +253,7 @@ export default function UserDetailPage({ params }: PageProps) {
         first_name: formData.first_name,
         business_type: formData.business_type,
         business_size: formData.business_size,
+        linkedin_url: formData.linkedin_url,
       }));
       // Refresh user data
       await getUserData();
@@ -600,7 +607,8 @@ export default function UserDetailPage({ params }: PageProps) {
   const detailsChanged =
     formData.first_name !== originalData.first_name ||
     formData.business_type !== originalData.business_type ||
-    formData.business_size !== originalData.business_size;
+    formData.business_size !== originalData.business_size ||
+    formData.linkedin_url !== originalData.linkedin_url;
 
   const icpChanged =
     formData.ideal_target_client !== originalData.ideal_target_client ||
@@ -667,6 +675,7 @@ export default function UserDetailPage({ params }: PageProps) {
                           first_name: originalData.first_name,
                           business_type: originalData.business_type,
                           business_size: originalData.business_size,
+                          linkedin_url: originalData.linkedin_url,
                         }));
                       }}
                       disabled={savingDetails}
@@ -759,6 +768,40 @@ export default function UserDetailPage({ params }: PageProps) {
                     <SelectItem value="200+">200+ employees</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+
+              <div className="col-span-2">
+                <label className="text-sm font-medium text-gray-500">
+                  LinkedIn Profile
+                </label>
+                <div className="mt-1 flex items-center space-x-2">
+                  <Input
+                    value={formData.linkedin_url}
+                    onChange={(e) =>
+                      handleInputChange("linkedin_url", e.target.value)
+                    }
+                    placeholder="https://linkedin.com/in/username"
+                    className="flex-1"
+                  />
+                  {formData.linkedin_url && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      asChild
+                      className="shrink-0"
+                    >
+                      <a
+                        href={formData.linkedin_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                        View
+                      </a>
+                    </Button>
+                  )}
+                </div>
               </div>
 
               <div>
