@@ -61,6 +61,7 @@ export function ContentCalendarContent({
   const [activeView, setActiveView] = useState<"calendar" | "library">(
     "calendar"
   );
+  const [refreshing, setRefreshing] = useState(false);
 
   const supabase = createClient();
 
@@ -120,6 +121,19 @@ export function ContentCalendarContent({
     }
   };
 
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await fetchData();
+      toast.success("Calendar refreshed successfully");
+    } catch (err) {
+      console.error("Error refreshing:", err);
+      toast.error("Failed to refresh calendar");
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   return (
     <div className="">
       {activeView === "calendar" ? (
@@ -130,6 +144,8 @@ export function ContentCalendarContent({
           selectedDate={selectedDate || null}
           activeView={activeView}
           onViewChange={setActiveView}
+          onRefresh={handleRefresh}
+          refreshing={refreshing}
           onMakeDefault={() => {
             // This method is no longer used in the new structure
           }}
@@ -140,6 +156,8 @@ export function ContentCalendarContent({
           onPromptsChange={fetchData}
           activeView={activeView}
           onViewChange={setActiveView}
+          onRefresh={handleRefresh}
+          refreshing={refreshing}
         />
       )}
     </div>

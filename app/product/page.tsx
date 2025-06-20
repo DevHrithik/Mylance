@@ -165,29 +165,62 @@ export default function ProductPage() {
 
   const faqs = [
     {
-      question: "Will the content actually sound like me?",
+      question: "What exactly am I getting with this?",
       answer:
-        "Yes — we use your past posts and inputs to train your writing profile. You'll always have the chance to edit or give feedback to improve it.",
+        "You'll receive a personalized content strategy based on your niche, your ideal customer, and your unique value. Each week, we deliver a content calendar with three LinkedIn prompts (Monday, Wednesday, Friday), plus a recommended hook to kickstart each post. These are designed to help you resonate with the *right* audience, not just chase vanity metrics.",
     },
     {
-      question: "How long does it take to set up?",
+      question: "How do you make sure the content sounds like me?",
       answer:
-        "Less than 10 minutes. Fill out a few questions and we'll handle the rest. Your strategy and prompts start showing up that same week.",
+        "Our system builds a writing profile based on your voice — and learns over time. You can edit the post drafts to refine the tone, and your edits are saved so future drafts become even more aligned with your authentic style.",
     },
     {
-      question: "Can I cancel anytime?",
+      question:
+        "I'm already posting on LinkedIn — how is this different from using AI or writing my own content?",
       answer:
-        "Yes — there's no contract. You can cancel anytime from your dashboard.",
+        "Anyone can post with ChatGPT now, but most AI content sounds generic. We give you the *strategy* and *structure* to consistently post content that actually builds trust with the people you want to work with. You stay in control — we just give you the framework to win.",
     },
     {
-      question: "Do I need to post every day?",
+      question:
+        "What if I don't like being on video or don't have great photos?",
       answer:
-        'Nope. We suggest users post 3 times per week. We give you everything you need — your job is just to show up, pick your prompt, make any edits you want, and hit "post."',
+        "That's totally fine. While visual content can help, it's not required to be successful. Our clients get traction with written posts that tell the right stories. You don't need polish — you need relevance.",
     },
     {
-      question: "What if I don't like the prompts?",
+      question:
+        "Can this help me land speaking gigs or raise my visibility as a thought leader?",
       answer:
-        "We offer a satisfaction guarantee. If you're not happy, just tell us within 30 days and we'll refund you.",
+        "Yes. By creating a consistent presence on LinkedIn and showcasing your expertise around clear content pillars, you become known for your perspective. Clients have landed podcasts, press features, and speaking invites simply by showing up every week with a strong voice.",
+    },
+    {
+      question: "What if I serve multiple audiences or have different brands?",
+      answer:
+        "We help you focus. During onboarding, we ask who you're trying to attract *right now* and build a content strategy around that. You can always evolve it later — but clarity wins on LinkedIn.",
+    },
+    {
+      question: "I'm busy and not super tech-savvy. Will this work for me?",
+      answer:
+        "Yes — that's who we built it for. You'll receive an email each week with three simple prompts and hooks. You can answer in writing or record a quick voice note to yourself. We keep it simple, focused, and easy to follow — like a personal trainer for your content.",
+    },
+    {
+      question: "Is there a setup fee or long-term contract?",
+      answer:
+        "Nope. It's normally $279 / month but for a limited time, we're offering beta customers to join us at $139.50/month, month-to-month. No setup fee. No lock-in. Just an honest commitment to helping you show up with clarity, consistency, and confidence. In return, we'd love your detailed feedback to help us shape the product.",
+    },
+    {
+      question: "How quickly do I start receiving content?",
+      answer:
+        "After you enroll, we schedule a 1:1 strategy call. Within a week of that call, you'll receive your first weekly content calendar. From there, you get a fresh set of prompts every week.",
+    },
+    {
+      question: "What kind of results should I expect?",
+      answer:
+        "Our most successful users show up consistently, write to their ideal audience, and use the calendar to stay on track. You'll build trust, grow your visibility, and attract more of the *right* leads — the ones ready to buy.",
+    },
+    {
+      question: "Can I talk to someone?",
+      answer:
+        'Yes! Book time with our team here to get your questions answered: <a href="https://calendly.com/bradley-33/linkedin-content-mvp-interest" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:text-blue-800 underline font-semibold">Schedule a call</a>',
     },
   ];
 
@@ -485,9 +518,10 @@ export default function ProductPage() {
                   </button>
                   {expandedFaq === index && (
                     <div className="px-6 pb-6">
-                      <p className="text-gray-700 leading-relaxed">
-                        {faq.answer}
-                      </p>
+                      <p
+                        className="text-gray-700 leading-relaxed"
+                        dangerouslySetInnerHTML={{ __html: faq.answer }}
+                      />
                     </div>
                   )}
                 </CardContent>

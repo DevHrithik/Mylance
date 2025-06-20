@@ -18,7 +18,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Card, CardContent } from "@/components/ui/card";
-import { Search, Plus, Calendar, Edit, Library } from "lucide-react";
+import { Search, Plus, Calendar, Edit, Library, RefreshCw } from "lucide-react";
 import { PromptData } from "@/hooks/useDashboardData";
 import {
   FeedbackButton,
@@ -32,6 +32,8 @@ interface PromptLibraryProps {
   onPromptsChange?: () => void;
   activeView: "calendar" | "library";
   onViewChange: (view: "calendar" | "library") => void;
+  onRefresh?: () => void;
+  refreshing?: boolean;
 }
 
 // Map database categories to display categories
@@ -69,6 +71,8 @@ export function PromptLibrary({
   onPromptsChange,
   activeView,
   onViewChange,
+  onRefresh,
+  refreshing = false,
 }: PromptLibraryProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedType, setSelectedType] = useState("all");
@@ -356,6 +360,22 @@ export function PromptLibrary({
           </div>
 
           <div className="flex items-center space-x-4">
+            {/* Refresh Button */}
+            {onRefresh && (
+              <Button
+                onClick={onRefresh}
+                variant="outline"
+                size="sm"
+                disabled={refreshing}
+                className="flex items-center space-x-2"
+              >
+                <RefreshCw
+                  className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
+                />
+                <span>Refresh</span>
+              </Button>
+            )}
+
             <div className="flex items-center space-x-2 bg-gray-100 rounded-lg p-1">
               <Button
                 variant={activeView === "calendar" ? "default" : "ghost"}

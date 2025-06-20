@@ -12,6 +12,7 @@ import {
   Library,
   Archive,
   MessageSquare,
+  RefreshCw,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -80,6 +81,8 @@ interface PromptCalendarProps {
   selectedDate?: string | null;
   activeView: "calendar" | "library";
   onViewChange: (view: "calendar" | "library") => void;
+  onRefresh?: () => void;
+  refreshing?: boolean;
   onMakeDefault?: () => void;
 }
 
@@ -114,6 +117,8 @@ export function PromptCalendar({
   selectedDate,
   activeView,
   onViewChange,
+  onRefresh,
+  refreshing = false,
 }: PromptCalendarProps) {
   const [currentPage, setCurrentPage] = useState(0);
   const router = useRouter();
@@ -527,6 +532,22 @@ export function PromptCalendar({
               Content Calendar
             </CardTitle>
             <div className="flex items-center space-x-4">
+              {/* Refresh Button */}
+              {onRefresh && (
+                <Button
+                  onClick={onRefresh}
+                  variant="outline"
+                  size="sm"
+                  disabled={refreshing}
+                  className="flex items-center space-x-2"
+                >
+                  <RefreshCw
+                    className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
+                  />
+                  <span>Refresh</span>
+                </Button>
+              )}
+
               {/* Overall Feedback Button */}
               <FeedbackButton
                 type="prompt"
